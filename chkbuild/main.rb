@@ -27,6 +27,10 @@
 require 'pathname'
 require 'optparse'
 
+unless defined?(IO::NULL)
+  IO::NULL = /mswin|mingw/ =~ RUBY_PLATFORM ? '/nul' : '/dev/null'
+end
+
 module ChkBuild
   TOP_DIRECTORY = Pathname.new(__FILE__).realpath.dirname.dirname
   def ChkBuild.build_top() TOP_DIRECTORY+"tmp/build" end
@@ -73,9 +77,10 @@ End
     begin
       Process.setpriority(Process::PRIO_PROCESS, 0, 10)
     rescue Errno::EACCES # already niced to 11 or more
+    rescue NameError # don't have Process::PRIO_PROCESS
     end
     File.umask(002)
-    STDIN.reopen("/dev/null", "r")
+    STDIN.reopen(IO::NULL, "r")
     STDOUT.sync = true
     ChkBuild.build_top.mkpath
     ChkBuild.lock_start
@@ -96,9 +101,10 @@ End
     begin
       Process.setpriority(Process::PRIO_PROCESS, 0, 10)
     rescue Errno::EACCES # already niced to 11 or more
+    rescue NameError # don't have Process::PRIO_PROCESS
     end
     File.umask(002)
-    STDIN.reopen("/dev/null", "r")
+    STDIN.reopen(IO::NULL, "r")
     STDOUT.sync = true
     ChkBuild.build_top.mkpath
     build, builthash = File.open(target_params_name) {|f| Marshal.load(f) }

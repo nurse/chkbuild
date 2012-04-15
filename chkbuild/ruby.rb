@@ -252,7 +252,7 @@ ChkBuild.define_build_proc('ruby') {|b|
   use_rubyspec = bopts[:use_rubyspec]
   inplace_build = bopts[:inplace_build]
 
-  b.run(autoconf_command, '--version', :section=>'autoconf-version')
+  b.run('sh', autoconf_command, '--version', :section=>'autoconf-version')
   b.run('bison', '--version', :section=>'bison-version')
 
   if %r{branches/ruby_1_8_} =~ ruby_branch && $' < "8"
@@ -283,7 +283,7 @@ ChkBuild.define_build_proc('ruby') {|b|
   ruby_svn_rev = svn_info_section[/Last Changed Rev: (\d+)/, 1].to_i
 
   Dir.chdir("ruby")
-  b.run(autoconf_command)
+  b.run('sh', autoconf_command)
 
   Dir.chdir(ruby_build_dir)
 
@@ -308,7 +308,7 @@ ChkBuild.define_build_proc('ruby') {|b|
   args << "warnflags=#{warnflags.join(' ')}" if warnflags
   args << "DLDFLAGS=#{dldflags.join(' ')}" unless dldflags.empty?
   args.concat configure_args
-  b.run("#{srcdir}/configure", *args)
+  b.run('sh', "#{srcdir}/configure", *args)
   b.make("miniruby", make_options)
   b.catch_error { b.run("./miniruby", "-v", :section=>"miniversion") }
   if File.directory? "#{srcdir}/bootstraptest"

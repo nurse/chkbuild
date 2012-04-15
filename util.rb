@@ -89,6 +89,8 @@ unless STDIN.respond_to? :close_on_exec?
   class IO
     def close_on_exec?
       self.fcntl(Fcntl::F_GETFD) & Fcntl::FD_CLOEXEC != 0
+    rescue NameError # don't have Fcntl::F_GETFD
+      false
     end
 
     def close_on_exec=(v)
@@ -99,6 +101,8 @@ unless STDIN.respond_to? :close_on_exec?
         flags &= ~Fcntl::FD_CLOEXEC
       end
       self.fcntl(Fcntl::F_SETFD, flags)
+      v
+    rescue NameError # don't have Fcntl::F_GETFD
       v
     end
   end

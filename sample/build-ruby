@@ -45,6 +45,7 @@ ChkBuild.limit(:as => 1024*1024*500*word_bytes) # bytes
 # ChkBuild.top_uri = nil # use relative URL
 
 ChkBuild::Ruby.def_target(
+=begin
   [
     { :suffix_? => 'trunk', :output_interval_timeout => '10min' },
     '1.9.3',
@@ -52,12 +53,14 @@ ChkBuild::Ruby.def_target(
     '1.8',
     '1.8.7',
   ],
+=end
 
   # ChkBuild::Ruby::MaintainedBranches,
   # %w[trunk 1.8],
   # %w[trunk 1.9.3 1.9.2],
   # %w[1.9.1],
   # %w[trunk],
+  %w[trunk],
 
   # ['o0', 'o1', nil, 'o3', 'os'],
 
@@ -68,6 +71,7 @@ ChkBuild::Ruby.def_target(
   # [nil, { :suffix_? => "-outofplace", :inplace_build => false}]
 
   # :autoconf_command => 'autoconf',
+  :autoconf_command => 'autoconf-2.67',
   # :configure_args => %w[--with-valgrind],
   # :cppflags => %w[-DRUBY_DEBUG_ENV],
   # :optflags => %w[-O2],

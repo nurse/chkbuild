@@ -54,6 +54,7 @@ module TimeoutCommand
   end
 
   def kill_processgroup(pgid, msgout)
+    pgid = -pgid if /mswin|mingw/ =~ RUBY_PLATFORM
     begin
       Process.kill('INT', -pgid)
       msgout.puts "timeout: INT signal sent." if msgout
@@ -72,6 +73,8 @@ module TimeoutCommand
         msgout.puts "timeout: #{sig} signal sent." if msgout
       }
     rescue Errno::ESRCH # no process i.e. success to kill
+    rescue Errno::EINVAL
+      msgout.puts "timeout: Errno::EINVAL." if msgout
     end
   end
 
@@ -80,6 +83,7 @@ module TimeoutCommand
       Process.kill(0, pid)
     rescue Errno::ESRCH # no process
       return false
+    rescue Errno::EINVAL
     end
     return true
   end
@@ -116,12 +120,16 @@ module TimeoutCommand
     end
     IO.popen(RbConfig.ruby, "w") {|io|
       pid = io.pid
-      io.puts 'STDIN.reopen("/dev/null", "r")'
-      io.puts "Process.setpgid($$, $$)"
+      io.puts 'STDIN.reopen(/mswin|mingw/ =~ RUBY_PLATFORM ? "/nul" : "/dev/null", "r")'
+      io.puts "begin"
+      io.puts "  Process.setpgid($$, $$)"
+      io.puts "rescue NotImplementedError"
+      io.puts "end"
       io.puts ruby_script
       io.puts '__END__'
       begin
         Process.setpgid(pid, pid)
+      rescue NotImplementedError
       rescue Errno::EACCES # already execed.
       rescue Errno::ESRCH # already exited. (setpgid for a zombie fails on OpenBSD)
       end
