@@ -50,7 +50,7 @@ ChkBuild.limit(:as => 1024*1024*500*word_bytes) # bytes
 # ChkBuild.top_uri = "file://#{ChkBuild.public_top}/"
 # ChkBuild.top_uri = nil # use relative URL
 
-ChkBuild::Ruby.def_target(
+ arg = [].push(
   [
     { :suffix_? => 'trunk', :output_interval_timeout => '10min' },
     '2.1',
@@ -97,5 +97,21 @@ ChkBuild::Ruby.def_target(
 
   :output_interval_timeout => '5min'
   )
+
+h = arg[-1]
+
+case uname = `uname -srm`
+when /\ALinux/
+  ENV['HOME'] = "/home/#{ENV['USER']}"
+  h[:optflags] = '-O3 -mfpmath=sse -msse2' if /i.86/ =~ uname
+when /\AFreeBSD/
+  ENV['PATH'] = "#{ENV['PATH']}:/usr/local/bin"
+  h[:configure_args_with_opt_dir] = %w[--with-opt-dir=/usr/local]
+end
+
+autoconf_command = '/home/naruse/local/autoconf/bin/autoconf'
+h[:autoconf_command] = autoconf_command if File.exist?(autoconf_command)
+
+ChkBuild::Ruby.def_target(arg)
 
 ChkBuild.main
