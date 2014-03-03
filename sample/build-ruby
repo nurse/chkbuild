@@ -112,6 +112,6 @@ end
 autoconf_command = '/home/naruse/local/autoconf/bin/autoconf'
 h[:autoconf_command] = autoconf_command if File.exist?(autoconf_command)
 
-ChkBuild::Ruby.def_target(arg)
+ChkBuild::Ruby.def_target(*arg)
 
 ChkBuild.main
