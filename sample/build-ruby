@@ -102,7 +102,7 @@ h = arg[-1]
 
 case uname = `uname -srm`
 when /\ALinux/
-  #ENV['HOME'] = "/home/#{ENV['USER']}"
+  ENV['HOME'] = "/home/#{ENV['USER']}" if File.exist?('/etc/redhat-release')
   h[:optflags] = '-O3 -mfpmath=sse -msse2' if /i.86/ =~ uname
 when /\AFreeBSD/
   ENV['PATH'] = "#{ENV['PATH']}:/usr/local/bin"
