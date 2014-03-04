@@ -53,8 +53,8 @@ ChkBuild.limit(:as => 1024*1024*500*word_bytes) # bytes
  arg = [].push(
   [
     { :suffix_? => 'trunk', :output_interval_timeout => '10min' },
-    '2.1',
-    '2.0.0',
+    { :suffix_? => '2.1', :output_interval_timeout => '10min' },
+    { :suffix_? => '2.0', :output_interval_timeout => '10min' },
     '1.9.3',
   ],
 
