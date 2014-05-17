@@ -70,7 +70,16 @@ End
     ["dbm", lambda { require "dbm"; DBM::VERSION }],
     ["gdbm", lambda { require "gdbm"; GDBM::VERSION }],
     ["readline", lambda { require "readline"; Readline::VERSION }],
-    ["openssl", lambda { require "openssl"; OpenSSL::OPENSSL_VERSION }],
+    ["openssl", lambda {
+      require "openssl"
+      hv = OpenSSL::OPENSSL_VERSION
+      lv = OpenSSL::OPENSSL_LIBRARY_VERSION rescue nil
+      if hv == lv || lv == nil
+        hv
+      else
+        "header:#{hv.dump} library:#{lv.dump}"
+      end
+    }],
     ["zlib", lambda { require "zlib"; hv = Zlib::ZLIB_VERSION; lv = Zlib.zlib_version; lv == hv ? lv : "header:#{hv} library:#{lv}" }],
     ["tcltklib", lambda { require "tcltklib"; TclTkLib::COMPILE_INFO }],
     ["curses", lambda { require "curses"; Curses::VERSION }],
@@ -310,8 +319,7 @@ ChkBuild.define_build_proc('ruby') {|b|
 
   Dir.chdir(checkout_dir)
   b.svn("http://svn.ruby-lang.org/repos/ruby", ruby_branch, 'ruby')
-  b.svn_info('ruby')
-  svn_info_section = b.logfile.get_section('svn-info/ruby')
+  svn_info_section = b.logfile.get_section('svn/ruby')
   ruby_svn_rev = svn_info_section[/Last Changed Rev: (\d+)/, 1].to_i
 
   Dir.chdir("ruby")
@@ -364,14 +372,10 @@ ChkBuild.define_build_proc('ruby') {|b|
   Dir.chdir(ruby_build_dir)
 
   use_rubyspec &&= b.catch_error {
-    opts2 = bopts.dup
-    opts2[:section] = "git-mspec"
-    b.git('git://github.com/nurse/mspec.git', 'mspec', opts2)
+    b.git('git://github.com/nurse/mspec.git', 'mspec', bopts)
   }
   use_rubyspec &&= b.catch_error {
-    opts2 = bopts.dup
-    opts2[:section] = "git-rubyspec"
-    b.git('git://github.com/nurse/rubyspec.git', 'rubyspec', opts2)
+    b.git('git://github.com/nurse/rubyspec.git', 'rubyspec', bopts)
   }
 
   b.mkcd("ruby")
@@ -630,7 +634,7 @@ ChkBuild.define_build_proc('ruby') {|b|
   }
 }
 
-ChkBuild.define_title_hook('ruby', %w[svn-info/ruby version.h verconf.h]) {|title, logs|
+ChkBuild.define_title_hook('ruby', %w[svn/ruby version.h verconf.h]) {|title, logs|
   log = logs.join('')
   lastrev = /^Last Changed Rev: (\d+)$/.match(log)
   version = /^#\s*define RUBY_VERSION "(\S+)"/.match(log)
@@ -659,7 +663,7 @@ ChkBuild.define_title_hook('ruby', %w[svn-info/ruby version.h verconf.h]) {|titl
   end
 }
 
-ChkBuild.define_title_hook('ruby', 'svn-info/ruby') {|title, log|
+ChkBuild.define_title_hook('ruby', 'svn/ruby') {|title, log|
   lastrev = /^Last Changed Rev: (\d+)$/.match(log)
   if lastrev
     title.update_hidden_title(:ruby_rev, "r#{lastrev[1]}")
@@ -804,7 +808,12 @@ ChkBuild.define_diff_preprocess_gsub('ruby', /ruby [0-9.a-z]+ \(.*\) \[.*\]$/) {
 # tcltklib: tcltklib 2010-08-25 :: Ruby2.0.0 (2012-02-20) with pthread :: Tcl8.5.10(without stub)/Tk8.5.10(without stub) with tcl_threads
 ChkBuild.define_diff_preprocess_gsub('ruby', /^tcltklib: (.*)Ruby[\d.]+ \([\d-]+\)/) {|match|
   "tcltklib: #{match[1]}Ruby<version> (<release-date>)"
-  "ruby <version>"
+}
+
+# + file miniruby
+# miniruby: ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), dynamically linked (uses shared libs), for GNU/Linux 2.6.26, BuildID[sha1]=0xd5a7c589cce09467a49e1792bc822ae48f75b5ee, not stripped
+ChkBuild.define_diff_preprocess_gsub('ruby', /BuildID\[sha1\]=0x[0-9a-f]+,/) {|match|
+  "BuildID[sha1]=0x<hex>"
 }
 
 # file.c:884: warning: comparison between signed and unsigned
@@ -1095,7 +1104,8 @@ ChkBuild.define_diff_preprocess_gsub('ruby', %r{^( *SIZE:\s+)[0-9]+}) {|match|
 # make dist
 #   MD5:    fc3ac1bff7e906cbca72c3dffce638b0
 #   SHA256: 677a188cb312453da596e21d5b843ba96d332f8ff93a247cd6c88d93f5e74093
-ChkBuild.define_diff_preprocess_gsub('ruby', %r{^( *(MD5|SHA256):\s+)[0-9a-f]+}) {|match|
+#   SHA512: b609be93572cea518672881dfcb872f6d8618dd5746b13591ec7a9e7feead918db5c92e13a528dca6a4a5d1a94cb5b170b131a700f2ffce846ad0c298b1cbe8c
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{^( *(MD5|SHA256|SHA512):\s+)[0-9a-f]+}) {|match|
   "#{match[1]}<digest>"
 }
 

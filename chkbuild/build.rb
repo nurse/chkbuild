@@ -292,6 +292,12 @@ class ChkBuild::Build
   end
 
   def child_build_target(target_output_name)
+    if @opts[:nice]
+      begin
+        Process.setpriority(Process::PRIO_PROCESS, 0, @opts[:nice])
+      rescue Errno::EACCES # already niced.
+      end
+    end
     setup_build(target_output_name)
     @logfile.start_section 'start'
     show_options
@@ -362,6 +368,19 @@ class ChkBuild::Build
     end
     if File.exist? '/proc/self/limits' # GNU/Linux
       self.run('cat', '/proc/self/limits', :section => 'process-limits')
+    end
+    # POSIX
+    self.run('ps', '-o', 'ruser user nice tty comm', '-p', $$.to_s, :section => 'process-ps')
+    if /dragonfly/ !~ RUBY_PLATFORM
+      # POSIX has rgroup, group and args but
+      # DragonFly BSD's ps don't have them.
+      self.run('ps', '-o', 'rgroup group args', '-p', $$.to_s, :section => nil)
+    end
+    if /linux/ =~ RUBY_PLATFORM
+      self.run('ps', '-o', 'ruid ruser euid euser suid suser fuid fuser', '-p', $$.to_s, :section => nil)
+      self.run('ps', '-o', 'rgid rgroup egid egroup sgid sgroup fgid fgroup', '-p', $$.to_s, :section => nil)
+      self.run('ps', '-o', 'blocked caught ignored pending', '-p', $$.to_s, :section => nil)
+      self.run('ps', '-o', 'cls sched rtprio f label', '-p', $$.to_s, :section => nil)
     end
   end
 
@@ -1717,9 +1736,10 @@ End
     }
 
     if Process.respond_to? :setrlimit
-      limit = ChkBuild.get_limit
+      limit_given = ChkBuild.get_limit
+      limit = {}
       opts.each {|k, v|
-        limit[$'.intern] = v if /\Ar?limit_/ =~ k.to_s
+        limit[$'.intern] = v if /\Ar?limit_/ =~ k.to_s && v
       }
       ruby_script << <<-"End"
         def resource_unlimit(resource)

@@ -116,11 +116,11 @@ require 'chkbuild'
 ENV['LC_ALL'] = 'C'
 
 # resource limits
-word_bytes = [nil].pack("p").length
-ChkBuild.limit(:cpu => 3600*4) # seconds
-ChkBuild.limit(:stack => 1024*1024*10*word_bytes) # bytes
-ChkBuild.limit(:data => 1024*1024*500*word_bytes) # bytes
-ChkBuild.limit(:as => 1024*1024*500*word_bytes) # bytes
+#word_bytes = [nil].pack("p").length
+#ChkBuild.limit(:cpu => 3600*4) # seconds
+#ChkBuild.limit(:stack => 1024*1024*10*word_bytes) # bytes
+#ChkBuild.limit(:data => 1024*1024*500*word_bytes) # bytes
+#ChkBuild.limit(:as => 1024*1024*500*word_bytes) # bytes
 
 # ChkBuild.nickname identify chkbuild installation.
 # It is used for title of HTML, etc.
@@ -195,7 +195,7 @@ def show_verconf_h(b)
   end
 end
 
-ChkBuild.define_title_hook(%w[nativeruby crossruby], %w[svn-info/ruby version.h verconf.h]) {|title, logs|
+ChkBuild.define_title_hook(%w[nativeruby crossruby], %w[svn/ruby version.h verconf.h]) {|title, logs|
   log = logs.join('')
   lastrev = /^Last Changed Rev: (\d+)$/.match(log)
   version = /^#\s*define RUBY_VERSION "(\S+)"/.match(log)
@@ -246,7 +246,6 @@ end
 
 ChkBuild.define_build_proc('nativeruby') {|b|
   b.svn("http://svn.ruby-lang.org/repos/ruby", 'trunk', 'ruby')
-  b.svn_info('ruby')
   Dir.chdir('ruby') {
     show_version_h(b)
     b.run('autoconf')
