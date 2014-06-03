@@ -39,7 +39,8 @@ ObjectSpace.each_object(Module) {|m| mods << m if m.name }
 mods = mods.sort_by {|m| m.name }
 mods.each {|mod|
   nummodule += 1
-  puts "#{mod.name} #{(mod.ancestors - [mod]).inspect}"
+  mc = mod.kind_of?(Class) ? "class" : "module"
+  puts "#{mc} #{mod.name} #{(mod.ancestors - [mod]).inspect}"
   mod.singleton_methods(false).sort.each {|methname|
     nummethod += 1
     meth = mod.method(methname)
@@ -65,7 +66,12 @@ puts "#{nummodule} modules, #{nummethod} methods"
 End
 
   VERSION_LIST_SCRIPT = <<'End'
-  [
+  require "etc"
+  ary = []
+  if defined? Etc::CS_GNU_LIBC_VERSION
+    ary << ["libc", lambda { Etc.confstr(Etc::CS_GNU_LIBC_VERSION) }]
+  end
+  ary.concat [
     ["gmp", lambda { Bignum::GMP_VERSION }],
     ["dbm", lambda { require "dbm"; DBM::VERSION }],
     ["gdbm", lambda { require "gdbm"; GDBM::VERSION }],
@@ -80,10 +86,16 @@ End
         "header:#{hv.dump} library:#{lv.dump}"
       end
     }],
-    ["zlib", lambda { require "zlib"; hv = Zlib::ZLIB_VERSION; lv = Zlib.zlib_version; lv == hv ? lv : "header:#{hv} library:#{lv}" }],
+    ["zlib", lambda {
+      require "zlib"
+      hv = Zlib::ZLIB_VERSION
+      lv = Zlib.zlib_version
+      lv == hv ? lv : "header:#{hv} library:#{lv}"
+    }],
     ["tcltklib", lambda { require "tcltklib"; TclTkLib::COMPILE_INFO }],
     ["curses", lambda { require "curses"; Curses::VERSION }],
-  ].each {|name, versionproc|
+  ]
+  ary.each {|name, versionproc|
     begin
       puts "#{name}: #{versionproc.call}"
     rescue Exception
@@ -391,6 +403,27 @@ ChkBuild.define_build_proc('ruby') {|b|
   args.concat configure_args
   b.run("#{srcdir}/configure", *args)
 
+  b.logfile.start_section 'config-files'
+  %w[
+    tool/config.guess
+    tool/config.sub
+    config.guess
+    config.sub
+  ].each {|fn|
+    begin
+      contents = File.read(fn)
+    rescue SystemCallError
+      next
+    end
+    if /^timestamp=(\S*)/ =~ contents
+      fn = File.basename(fn)
+      timestamp = $1
+      timestamp.sub!(/\A'/, '')
+      timestamp.sub!(/'\z/, '')
+      puts "#{fn}: #{timestamp}"
+    end
+  }
+
   verconf_list = [
     'verconf.h',
     'config.h',
@@ -410,13 +443,9 @@ ChkBuild.define_build_proc('ruby') {|b|
     }
   end
 
-  if /^CC[ \t]*=[ \t](.*)/ =~ File.read('Makefile')
+  if /^CC[ \t]*=[ \t](\S*)/ =~ File.read('Makefile')
     cc = $1
-    if /gcc/ =~ cc
-      b.catch_error {
-        b.run(cc, '--version', :section=>'cc-version')
-      }
-    end
+    b.cc_version(cc)
   end
 
   make_args = ["miniruby", make_options]
@@ -912,9 +941,42 @@ ChkBuild.define_diff_preprocess_gsub('ruby', %r{\[\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\
   "[YYYY-MM-DDThh:mm:ss" + match[1].gsub(/\d/, 's') + " #<pid>]"
 }
 
+# Leaked thread: TestRakeTaskWithArguments#test_args_not_passed_if_no_prereq_names_on_multitask: #<Thread:0x<address>@<build-dir>/ruby/lib/rake/thread_pool.rb:116 run>
+# Leaked thread: Rinda::TestRingServer#test_ring_server_ipv4_multicast: #<Thread:0x<address> sleep>
+# Leaked threads: IMAPTest#test_imaps_post_connection_check: #<Thread:0x00000009e198e0 sleep>
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{\ALeaked threads?: (\S*): (.*)\n\z}o) {|match|
+  test_method = match[1]
+  threads = match[2].gsub(%r{<Thread:0x[0-9a-f]+(?:@<build-dir>/ruby/(.*?):(\d+))? [a-z]+>}) {
+    if $1
+      "<Thread:<address>@<build-dir>/ruby/#{$1}:#{$2} <status>>"
+    else
+      "<Thread:<address> <status>>"
+    end
+  }
+  "Leaked thread: #{test_method}: #{threads}\n"
+}
+
+# Finished thread: JaxenTester#test_much_ado: #<Thread:0x00000009fdf418 dead>
+# Finished threads: JaxenTester#test_much_ado: #<Thread:0x00000009e198e0 dead>
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{\AFinished threads?: \S*: .*\n\z}o) {|match|
+  "Finished thread: <test-method>: <thread>\n"
+}
+
+# Leaked file descriptor: TestIO_Console#test_sync: 17 : #<File:/dev/pts/12>
+# Leaked file descriptor: TestIO_Console#test_sync: 18
+# Leaked file descriptor: TestXMLRPC::TestCookie#test_cookie: 18 : #<TCPSocket:fd 18>
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{\ALeaked file descriptor: (\S*): \d+}o) {|match|
+  "Leaked file descriptor: #{match[1]}: <fd>"
+}
+
+# Closed file descriptor: DL::TestBase#test_empty: 18
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{\AClosed file descriptor: \S*: \d+\n\z}o) {|match|
+  "Closed file descriptor: <test-method>: <fd>\n"
+}
+
 # #<String:0x4455ae94
-ChkBuild.define_diff_preprocess_gsub('ruby', %r{\#<[A-Z][A-Za-z0-9_]*(?:::[A-Z][A-Za-z0-9_]*)*:0x[0-9a-f]+}o) {|match|
-  match[0].sub(/[0-9a-f]+\z/) { '<address>' }
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{(\#<[A-Z][A-Za-z0-9_]*(?:::[A-Z][A-Za-z0-9_]*)*:)0x[0-9a-f]+}o) {|match|
+  "#{match[1]}<address>"
 }
 
 # #<#<Class:0xXXXXXXX>:0x0e87dd00
@@ -1026,9 +1088,30 @@ ChkBuild.define_diff_preprocess_gsub('ruby', /^(Version of .* : )\d+$/) {|match|
 }
 
 # test-all:
+# == test-all # <time>
+# == test/-ext- # <time>
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{^== test(-all|/\S+) }) {|match|
+  '== test-all '
+}
+
+# test-all:
+# + gmake TESTS=-v RUBYOPT=-w test-all
+# + gmake 'TESTS=-v test/-ext-' RUBYOPT=-w test-all
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{^\+ (g?make) (.*) test-all$}) {|match|
+  "+ #{match[1]} <options> test-all"
+}
+
+# test-all:
+# ./miniruby -I./lib -I. -I.ext/common  ./tool/runruby.rb --extout=.ext  -- --disable-gems "./test/runner.rb" --ruby="./miniruby -I./lib -I. -I.ext/common  ./tool/runruby.rb --extout=.ext  -- --disable-gems"  -v
+# ./miniruby -I./lib -I. -I.ext/common  ./tool/runruby.rb --extout=.ext  -- --disable-gems "./test/runner.rb" --ruby="./miniruby -I./lib -I. -I.ext/common  ./tool/runruby.rb --extout=.ext  -- --disable-gems"  -v test_open3.rb
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{^\./miniruby .* "./test/runner.rb" .*$}) {|match|
+  './miniruby <options> "./test/runner.rb" <arguments>'
+}
+
+# test-all:
 # 6937 tests, 2165250 assertions, 6 failures, 0 errors, 0 skips
-ChkBuild.define_diff_preprocess_gsub('ruby', /^(\d+ tests, )\d+( assertions, \d+ failures, \d+ errors, \d+ skips)$/) {|match|
-  match[1] + "<num>" + match[2]
+ChkBuild.define_diff_preprocess_gsub('ruby', /^\d+ tests, \d+ assertions, \d+ failures, \d+ errors, \d+ skips$/) {|match|
+  "<num> tests, <num> assertions, <num> failures, <num> errors, <num> skips"
 }
 
 # Test run options: --seed 27850 --verbose
@@ -1044,8 +1127,22 @@ ChkBuild.define_diff_preprocess_gsub('ruby', %r{/dev/pts/\d+}) {|match|
 # rubyspec:
 # 2932 files, 13911 examples, 182945 expectations, 34 failures, 24 errors
 # 1 file, 36 examples, 52766 expectations, 0 failures, 0 errors
-ChkBuild.define_diff_preprocess_gsub('ruby', /^(\d+ files?, \d+ examples?, )\d+( expectations?, \d+ failures?, \d+ errors?)$/) {|match|
-  match[1] + "<num>" + match[2]
+ChkBuild.define_diff_preprocess_gsub('ruby', /^\d+ files?, \d+ examples?, \d+ expectations?, \d+ failures?, \d+ errors?$/) {|match|
+  '<num> files, <num> examples, <num> expectations, <num> failures, <num> errors'
+}
+
+# rubyspec:
+# == rubyspec # <time>
+# == rubyspec/command_line/dash_a_spec.rb # <time>
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{^== rubyspec(/\S+)? }) {|match|
+  '== rubyspec '
+}
+
+# rubyspec:
+# + bin/ruby mspec/bin/mspec -V -f s -B <build-dir>/rubyspec/ruby.1.9.mspec -t <build-dir>/bin/ruby rubyspec/command_line rubyspec/core rubyspec/language rubyspec/library rubyspec/optional/capi
+# + bin/ruby mspec/bin/mspec -V -f s -B <build-dir>/rubyspec/ruby.1.9.mspec -t <build-dir>/bin/ruby rubyspec/command_line/dash_a_spec.rb
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{^\+ bin/ruby mspec/bin/mspec (.*)/bin/ruby rubyspec/.+$}) {|match|
+  "+ bin/ruby mspec/bin/mspec #{match[1]}/bin/ruby rubyspec/<testfile>"
 }
 
 # MinitestSpec#test_needs_to_verify_nil: <elapsed> s: .
@@ -1107,6 +1204,36 @@ ChkBuild.define_diff_preprocess_gsub('ruby', %r{^( *SIZE:\s+)[0-9]+}) {|match|
 #   SHA512: b609be93572cea518672881dfcb872f6d8618dd5746b13591ec7a9e7feead918db5c92e13a528dca6a4a5d1a94cb5b170b131a700f2ffce846ad0c298b1cbe8c
 ChkBuild.define_diff_preprocess_gsub('ruby', %r{^( *(MD5|SHA256|SHA512):\s+)[0-9a-f]+}) {|match|
   "#{match[1]}<digest>"
+}
+
+# == title-info # 2014-05-24T10:37:17+09:00
+# title:r46065 ruby 2.2.0dev (2014-05-24) [x86_64-linux] (dew) 332W
+# title_version:r46065 ruby 2.2.0dev (2014-05-24) [x86_64-linux]
+# version:r46065 ruby 2.2.0dev (2014-05-24) [x86_64-linux]
+# dep_versions:[]
+# hostname:(dew)
+# warn:332W
+# mark:
+# status:
+# "http\x3A//svn.ruby-lang.org/repos/ruby/trunk":46065
+# "git\x3A//github.com/nurse/mspec.git":88ffc944daaa9f1894521f8abaddc88d9a087342
+# "git\x3A//github.com/nurse/rubyspec.git":aa2cfacb6896028adc8cb84f1d80fd556791ae9
+# ruby_rev:r46065
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{^title-info .*:.*}) {|match|
+  "title-info <key>:<val>"
+}
+
+# Leaked tempfile: TestRDocEncoding: #<Tempfile:/home/akr/chkbuild/tmp/build/20140525T170448Z/tmp/test_rdoc_encoding20140526-21979-130fn25>
+# Leaked tempfiles: TestJSON#test_load: #<Tempfile:/home/akr/chkbuild/tmp/build/<buildtime>/tmp/json20140525-10635-1art0vr>
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{/tmp/([0-9A-Za-z_.-]+)[0-9]{8}-[0-9]+-[0-9a-z]+}) {|match|
+  "/tmp/#{match[1]}<temp>"
+}
+
+# Leaked file descriptor: Rinda::TestRingFinger#test_make_socket_ipv6_multicast: 19 : #<Socket:fd 19>
+# Leaked file descriptor: TestXMLRPC::TestCookie#test_cookie: 18 : #<TCPSocket:fd 18>
+# Leaked file descriptor: TestParallel::TestParallelWorker#test_accept_run_command_multiple_times: 17 : #<IO:fd 17>
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{\#<(IO|File|TCPSocket|TCPServer|SOCKSSocket|UDPSocket|UNIXSocket|UNIXServer|Socket):fd \d+>}o) {|match|
+  "\#<#{match[1]}:fd <fd>>"
 }
 
 # segment       = *pchar

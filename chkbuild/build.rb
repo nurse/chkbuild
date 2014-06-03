@@ -300,13 +300,18 @@ class ChkBuild::Build
     end
     setup_build(target_output_name)
     @logfile.start_section 'start'
+    puts "start-time: #{prebuilt_start_time}"
+    puts "build-dir: #{@build_dir}"
     show_options
     show_cpu_info
+    show_memory_info
     show_process_status
     ret = self.do_build
+    title, title_version, title_assoc = gen_title
+    show_title_info(title, title_version, title_assoc)
     @logfile.start_section 'end'
     puts "elapsed #{format_elapsed_time(Time.now - prebuilt_start_time_obj)}"
-    update_result
+    update_result(title, title_version, title_assoc)
     @logfile.start_section 'end2'
     ret
   end
@@ -345,17 +350,38 @@ class ChkBuild::Build
   end
 
   def show_cpu_info
-    if File.exist? '/proc/cpuinfo' # GNU/Linux
+    if File.exist? '/proc/cpuinfo' # GNU/Linux, NetBSD
       self.run('cat', '/proc/cpuinfo', :section => 'cpu-info')
     end
     if /freebsd/ =~ RUBY_PLATFORM
-      self.run('sysctl', 'hw.model', 'hw.ncpu', 'hw.clockrate', :section => 'cpu-info')
+      self.run('sysctl', 'hw.model', 'hw.ncpu', 'hw.byteorder', 'hw.clockrate', 'hw.machine', 'hw.machine_arch', :section => 'cpu-info')
+    end
+    if /dragonfly/ =~ RUBY_PLATFORM
+      self.run('sysctl', 'hw.model', 'hw.ncpu', 'hw.byteorder', 'hw.clockrate', 'hw.machine', 'hw.machine_arch', :section => 'cpu-info')
     end
     if /netbsd/ =~ RUBY_PLATFORM
-      self.run('sysctl', 'hw.model', 'hw.ncpu', :section => 'cpu-info')
+      self.run('sysctl', 'hw.model', 'hw.ncpu', 'hw.byteorder', 'hw.machine', 'hw.machine_arch', :section => 'cpu-info')
     end
     if /openbsd/ =~ RUBY_PLATFORM
-      self.run('sysctl', 'hw.model', 'hw.ncpu', 'hw.cpuspeed', :section => 'cpu-info')
+      self.run('sysctl', 'hw.model', 'hw.ncpu', 'hw.byteorder', 'hw.cpuspeed', 'hw.machine', :section => 'cpu-info')
+    end
+  end
+
+  def show_memory_info
+    if File.exist? '/proc/meminfo' # GNU/Linux, NetBSD
+      self.run('cat', '/proc/meminfo', :section => 'memory-info')
+    end
+    if /freebsd/ =~ RUBY_PLATFORM
+      self.run('sysctl', 'hw.realmem', 'hw.physmem', 'hw.usermem', :section => 'memory-info')
+    end
+    if /dragonfly/ =~ RUBY_PLATFORM
+      self.run('sysctl', 'hw.physmem', 'hw.usermem', :section => 'memory-info')
+    end
+    if /netbsd/ =~ RUBY_PLATFORM
+      self.run('sysctl', 'hw.physmem', 'hw.usermem', 'hw.physmem64', 'hw.usermem64', :section => 'memory-info')
+    end
+    if /openbsd/ =~ RUBY_PLATFORM
+      self.run('sysctl', 'hw.physmem', 'hw.usermem', :section => 'memory-info')
     end
   end
 
@@ -382,6 +408,15 @@ class ChkBuild::Build
       self.run('ps', '-o', 'blocked caught ignored pending', '-p', $$.to_s, :section => nil)
       self.run('ps', '-o', 'cls sched rtprio f label', '-p', $$.to_s, :section => nil)
     end
+  end
+
+  def show_title_info(title, title_version, title_assoc)
+    @logfile.start_section 'title-info'
+    puts "title-info title:#{Escape._ltsv_val(title)}"
+    puts "title-info title_version:#{Escape._ltsv_val(title_version)}"
+    title_assoc.each {|k, v|
+      puts "title-info #{Escape._ltsv_key k}:#{Escape._ltsv_val v}"
+    }
   end
 
   def do_build
@@ -472,7 +507,7 @@ class ChkBuild::Build
     end
   end
 
-  def update_result
+  def update_result(title, title_version, title_assoc)
     @t = prebuilt_start_time
     @last_txt_relpath = "#{@depsuffixed_name}/last.txt"
     @last_html_relpath = "#{@depsuffixed_name}/last.html"
@@ -490,7 +525,6 @@ class ChkBuild::Build
     @compressed_failhtml_relpath = "#{@depsuffixed_name}/log/#{@t}.fail.html.gz"
     @compressed_diffhtml_relpath = "#{@depsuffixed_name}/log/#{@t}.diff.html.gz"
 
-    title, title_version, title_assoc = gen_title
     send_title_to_parent(title_version)
     force_link @current_txt, ChkBuild.public_top+@last_txt_relpath if @current_txt.file?
     compress_file(@log_filename, ChkBuild.public_top+@compressed_rawlog_relpath)
@@ -834,6 +868,22 @@ End
     end
   end
 
+  def markup_uri(line, result)
+    i = 0
+    line.scan(/#{URI.regexp(['http', 'https'])}/o) {
+      match = $~
+      if /\A[a-z]+:\z/ =~ match[0]
+        result << h(line[i...match.end(0)]) if i < match.end(0)
+      else
+        result << h(line[i...match.begin(0)]) if i < match.begin(0)
+        result << "<a href=#{ha match[0]}>#{h match[0]}</a>"
+      end
+      i = match.end(0)
+    }
+    result << h(line[i...line.length]) if i < line.length
+    result
+  end
+
   def markup_log_line(line)
     line = encode_invalid(line)
     result = ''
@@ -842,13 +892,7 @@ End
       rest = $'
       result << "<a name=#{ha(u(tag))} href=#{ha uri_from_top(@compressed_loghtml_relpath)+"##{u(tag)}"}>== #{h(tag)}#{h(rest)}</a>"
     else
-      i = 0
-      line.scan(/#{URI.regexp(['http'])}/o) {
-        result << h(line[i...$~.begin(0)]) if i < $~.begin(0)
-        result << "<a href=#{ha $&}>#{h $&}</a>"
-        i = $~.end(0)
-      }
-      result << h(line[i...line.length]) if i < line.length
+      markup_uri(line, result)
     end
     result
   end
@@ -862,13 +906,7 @@ End
       result << "<a name=#{ha(u(tag))} href=#{ha uri_from_top(@compressed_failhtml_relpath)+"##{u(tag)}"}>== #{h(tag)}#{h(rest)}</a>"
       result << " (<a href=#{ha uri_from_top(@compressed_loghtml_relpath)+"##{u(tag)}"}>full</a>)"
     else
-      i = 0
-      line.scan(/#{URI.regexp(['http'])}/o) {
-        result << h(line[i...$~.begin(0)]) if i < $~.begin(0)
-        result << "<a href=#{ha $&}>#{h $&}</a>"
-        i = $~.end(0)
-      }
-      result << h(line[i...line.length]) if i < line.length
+      markup_uri(line, result)
     end
     result
   end
@@ -881,13 +919,7 @@ End
       "<a href=#{ha url}>#{h content.strip}</a>"
     else
       result = ''
-      i = 0
-      line.scan(/#{URI.regexp(['http'])}/o) {
-	result << h(line[i...$~.begin(0)]) if i < $~.begin(0)
-	result << "<a href=#{ha $&}>#{h $&}</a>"
-	i = $~.end(0)
-      }
-      result << h(line[i...line.length]) if i < line.length
+      markup_uri(line, result)
       result
     end
   end
@@ -982,7 +1014,6 @@ End
     <title><%=h title %></title>
     <meta name="author" content="chkbuild">
     <meta name="generator" content="chkbuild">
-    <link rel="alternate" type="application/rss+xml" title="RSS" href=<%=ha uri_from_top(@rss_relpath, true) %>>
   </head>
   <body>
     <h1><%=h title %></h1>
@@ -1048,7 +1079,6 @@ End
     <title><%=h title %></title>
     <meta name="author" content="chkbuild">
     <meta name="generator" content="chkbuild">
-    <link rel="alternate" type="application/rss+xml" title="RSS" href=<%=ha uri_from_top(@rss_relpath, true) %>>
   </head>
   <body>
     <h1><%=h title %></h1>
@@ -1434,7 +1464,8 @@ End
   end
 
   def make_diff_content(time)
-    timemap = { time => "<buildtime>" }
+    build_dir = ChkBuild.build_top
+    timemap = { time => "<buildtime>", "#{build_dir}/#{time}" => "<build-dir>" }
     uncompressed = Tempfile.open("#{time}.u.")
     open_gziped_log(time) {|z|
       FileUtils.copy_stream(z, uncompressed)
@@ -1444,6 +1475,7 @@ End
     logfile.dependencies.each {|dep_suffixed_name, dep_time, dep_version|
       target_name = dep_suffixed_name.sub(/[-_].*\z/, '')
       timemap[dep_time] = "<#{target_name}-buildtime>"
+      timemap["#{build_dir}/#{dep_time}"] = "<#{target_name}-build-dir>"
     }
     pat = Regexp.union(*timemap.keys)
     tmp = Tempfile.open("#{time}.d.")
@@ -1503,7 +1535,6 @@ End
     <title><%=h title %></title>
     <meta name="author" content="chkbuild">
     <meta name="generator" content="chkbuild">
-    <link rel="alternate" type="application/rss+xml" title="RSS" href=<%=ha uri_from_top(@rss_relpath, true) %>>
   </head>
   <body>
     <h1><%=h title %></h1>
@@ -1826,6 +1857,67 @@ End
         h[:section] ||= target
         self.run("gmake", *(make_opts + [target, h]))
       }
+    end
+  end
+
+  def cc_version(cc, opts2=nil)
+    opts = @opts.dup
+    opts.update opts2 if opts2
+
+    secname = opts.has_key?(:section) ? opts[:section] : 'cc-version'
+
+    # gcc (Debian 4.4.5-8) 4.4.5
+    if %r{(\A|/)gcc\z} =~ cc
+      cmd = "#{cc} --version"
+      message = `#{cmd} 2>&1`
+      status = $?
+      if status.success?
+	@logfile.start_section(secname) if secname
+        puts "+ #{cmd}"
+        puts message
+        return
+      end
+    end
+
+    # IBM XL C/C++ for AIX, V12.1 (5765-J02, 5725-C72)
+    # Version: 12.01.0000.0000
+    if %r{(\A|/)xlc\z} =~ cc
+      cmd = "#{cc} -qversion"
+      message = `#{cmd} 2>&1`
+      status = $?
+      if status.success?
+	@logfile.start_section(secname) if secname
+        puts "+ #{cmd}"
+        puts message
+        return
+      end
+    end
+
+    if %r{(\A|/)cc\z} =~ cc
+      # FreeBSD clang version 3.3 (tags/RELEASE_33/final 183502) 20130610
+      # Target: x86_64-unknown-freebsd10.0
+      # Thread model: posix
+      cmd = "#{cc} --version"
+      message = `#{cmd} 2>&1`
+      status = $?
+      if status.success? && /^FreeBSD clang version/ =~ message
+	@logfile.start_section(secname) if secname
+        puts "+ #{cmd}"
+        puts message
+        return
+      end
+
+      # cc: Sun C 5.10 SunOS_i386 2009/06/03
+      # usage: cc [ options] files.  Use 'cc -flags' for details
+      cmd = "#{cc} -V"
+      message = `#{cmd} 2>&1`
+      status = $?
+      if status.success? && /^cc: Sun C/ =~ message
+	@logfile.start_section(secname) if secname
+        puts "+ #{cmd}"
+        puts message
+        return
+      end
     end
   end
 
