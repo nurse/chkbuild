@@ -99,7 +99,7 @@ End
     begin
       puts "#{name}: #{versionproc.call}"
     rescue Exception
-      puts "#{name}: #{$!}"
+      puts "#{name}: ERROR #{$!}"
     end
   }
 End
@@ -569,10 +569,16 @@ ChkBuild.define_build_proc('ruby') {|b|
     if File.file? "#{srcdir}/KNOWNBUGS.rb"
       b.catch_error { b.make("test-knownbug", "OPTS=-v -q", make_options) }
     end
+    hide_skip_option = '--hide-skip '
+    if %r{branches/ruby_(\d+)_(\d+)_(\d+)} =~ ruby_branch &&
+       ([$1.to_i, $2.to_i, $3.to_i] <=> [1,9,2]) <= 0
+      hide_skip_option = ''
+    end
     b.catch_error {
       parallel_option = ''
       parallel_option = "j#{parallel}" if parallel
-      b.make("test-all", "TESTS=--hide-skip -v#{parallel_option}", "RUBYOPT=-w", make_options.merge(:section=>"test-all"))
+
+      b.make("test-all", "TESTS=#{hide_skip_option}-v#{parallel_option}", "RUBYOPT=-w", make_options.merge(:section=>"test-all"))
     }
     b.catch_error {
       if /^\d+ tests, \d+ assertions, (\d+) failures, (\d+) errors/ !~ b.logfile.get_section('test-all')
@@ -587,7 +593,7 @@ ChkBuild.define_build_proc('ruby') {|b|
               else
                 testpath = t # "TESTS=-v test/foo" doesn't work on Ruby 1.8
               end
-              b.make("test-all", "TESTS=--hide-skip -v #{testpath}", "RUBYOPT=-w", make_options.merge(:section=>"test/#{t}"))
+              b.make("test-all", "TESTS=#{hide_skip_option}-v #{testpath}", "RUBYOPT=-w", make_options.merge(:section=>"test/#{t}"))
             }
           end
         }
@@ -815,6 +821,15 @@ ChkBuild.define_title_hook('ruby', nil) {|title, logfile|
   title.update_title(:mark, mark)
 }
 
+# ps -o blocked : 0000000000000000
+# ps -o blocked : fffffffe7dfbfaff
+# ps -o caught : 0000000182006e47
+# ps -o ignored : 0000000000000000
+# ps -o pending : 0000000000000000
+ChkBuild.define_diff_preprocess_gsub('ruby', /^ps -o (blocked|caught|ignored|pending) : [0-9a-f]+/) {|match|
+  "ps -o #{match[1]} : <hex>"
+}
+
 # #define RUBY_RELEASE_DATE "2013-04-06"
 ChkBuild.define_diff_preprocess_gsub('ruby', /^\#define RUBY_RELEASE_DATE ".*"/) {|match|
   '#define RUBY_RELEASE_DATE "<year>-<mm>-<dd>"'
@@ -910,7 +925,21 @@ ChkBuild.define_diff_preprocess_gsub('ruby', /Generated on .* for libruby by ABI
   "Generated on <date> for libruby by ABI Compliance Checker"
 }
 
-# test_exception.rb #1 test_exception.rb:1
+# btest since 2014-06-08
+#   test_attr.rb 
+#   #1 test_attr.rb:1:in `<top (required)>' F 0.006
+#   stderr output is not empty
+#      bootstraptest.tmp.rb:2:in `<main>': undefined local variable or method `x' for main:Object (NameError)
+#   #2 test_attr.rb:28:in `<top (required)>' . 0.006
+
+ChkBuild.define_diff_preprocess_gsub('ruby', /\#\d+ (test_.* [F.]) [0-9]+\.[0-9]+/) {|match|
+  "#<n> #{match[1]} <elapsed>"
+}
+
+# test_exception.rb #2 test_exception.rb:1
+# .#3 test_exception.rb:8
+# .#4 test_exception.rb:20
+# .#5 test_exception.rb:37
 ChkBuild.define_diff_preprocess_gsub('ruby', /\#\d+ test_/) {|match|
   "#<n> test_"
 }

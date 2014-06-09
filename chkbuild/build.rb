@@ -305,7 +305,8 @@ class ChkBuild::Build
     show_options
     show_cpu_info
     show_memory_info
-    show_process_status
+    show_process_limits
+    show_process_ps
     ret = self.do_build
     title, title_version, title_assoc = gen_title
     show_title_info(title, title_version, title_assoc)
@@ -385,7 +386,7 @@ class ChkBuild::Build
     end
   end
 
-  def show_process_status
+  def show_process_limits
     if File.exist?('/bin/pflags') # Solaris
       self.run('pflags', $$.to_s)
     elsif File.exist? '/proc/self/status' # GNU/Linux
@@ -395,19 +396,33 @@ class ChkBuild::Build
     if File.exist? '/proc/self/limits' # GNU/Linux
       self.run('cat', '/proc/self/limits', :section => 'process-limits')
     end
+  end
+
+  def show_process_ps
+    @logfile.start_section 'process-ps'
     # POSIX
-    self.run('ps', '-o', 'ruser user nice tty comm', '-p', $$.to_s, :section => 'process-ps')
+    %w[ruser user nice tty comm].each {|field| show_ps_result($$, field) }
     if /dragonfly/ !~ RUBY_PLATFORM
       # POSIX has rgroup, group and args but
       # DragonFly BSD's ps don't have them.
-      self.run('ps', '-o', 'rgroup group args', '-p', $$.to_s, :section => nil)
+      %w[rgroup group args].each {|field| show_ps_result($$, field) }
     end
     if /linux/ =~ RUBY_PLATFORM
-      self.run('ps', '-o', 'ruid ruser euid euser suid suser fuid fuser', '-p', $$.to_s, :section => nil)
-      self.run('ps', '-o', 'rgid rgroup egid egroup sgid sgroup fgid fgroup', '-p', $$.to_s, :section => nil)
-      self.run('ps', '-o', 'blocked caught ignored pending', '-p', $$.to_s, :section => nil)
-      self.run('ps', '-o', 'cls sched rtprio f label', '-p', $$.to_s, :section => nil)
+      %w[
+        ruid ruser euid euser suid suser fuid fuser
+        rgid rgroup egid egroup sgid sgroup fgid fgroup
+        blocked caught ignored pending
+        cls sched rtprio f label
+      ].each {|field| show_ps_result($$, field) }
     end
+  end
+
+  def show_ps_result(pid, field)
+    result = `ps -o #{field} -p #{pid} 2>&1`
+    return unless $?.success?
+    result.sub!(/\A.*\n/, '') # strip the header line
+    result.strip!
+    puts "ps -o #{field} : #{result}"
   end
 
   def show_title_info(title, title_version, title_assoc)
@@ -645,7 +660,9 @@ class ChkBuild::Build
     return true unless err
     @errors << err
     @logfile.start_section("#{name} error") if name
-    show_backtrace err unless CommandError === err
+    unless CommandError === err || CommandTimeout === err
+      show_backtrace err
+    end
     GDB.check_core(@build_dir)
     if CommandError === err
       puts "failed(#{err.reason})"
@@ -932,8 +949,8 @@ End
     result
   end
 
-  def no_differences_message(title)
-    if /success/ =~ title
+  def no_differences_message
+    if @current_status == 'success'
       "<p>Success</p>"
     elsif @older_time
       "<p>Failed as the <a href=#{ha uri_from_top(@compressed_older_loghtml_relpath)}>previous build</a>.\n" +
@@ -977,7 +994,7 @@ End
 %     }
 </pre>
 % else
-    <%= no_differences_message(title) %>
+    <%= no_differences_message %>
 % end
     <p>
 % if @older_time
@@ -1041,7 +1058,7 @@ End
 %     }
 </pre>
 % else
-    <%= no_differences_message(title) %>
+    <%= no_differences_message %>
 % end
     <p>
 % if @older_time
@@ -1164,7 +1181,7 @@ End
 <p><a href=<%=ha uri_from_top(@compressed_diffhtml_relpath) %>>read more differences</a></p>
 %   end
 % else
-<%= no_differences_message(title) %>
+<%= no_differences_message %>
 % end
 <p>
 % if @older_time
@@ -1176,7 +1193,7 @@ End
 </p>
 End
 
-  def make_rss_html_content(title, has_diff)
+  def make_rss_html_content(has_diff)
     max_diff_lines = 500
     ERB.new(RSS_CONTENT_HTMLTemplate, nil, '%').result(binding)
   end
@@ -1213,7 +1230,7 @@ End
 	  item.link = latest_url
 	  item.title = title
 	  item.date = t
-	  item.content_encoded = make_rss_html_content(title, has_diff)
+	  item.content_encoded = make_rss_html_content(has_diff)
 	}
       }
       atomic_make_file(ChkBuild.public_top+@rss_relpath) {|f| f.puts rss.to_s }
@@ -1317,11 +1334,22 @@ End
     tmp2 = make_diff_content(t2)
     header1 = "--- #{t1}\n"
     header2 = "+++ #{t2}\n"
-    has_diff = has_change_line | Lchg.diff(tmp1.path, tmp2.path, out, header1, header2)
+    diffsecs = { :old => {}, :new => {} }
+    current_section = {}
+    scanner = lambda {|mode, linenum, mark, line|
+      current_section[mode] = $1 if /\A== (\S+)/ =~ line
+      if mark != ' '
+        diffsecs[mode][current_section[mode]] ||= linenum
+      end
+      #open("/dev/tty", "w") {|f| f.puts [mode, linenum, mark, line].inspect }
+    }
+    has_diff = has_change_line | Lchg.diff(tmp1.path, tmp2.path, out, header1, header2, scanner)
     return nil if !has_diff
     ret = []
     ret << 'src' if has_change_line
-    ret.concat different_sections(tmp1, tmp2)
+    different_sections = diffsecs[:new].keys.sort_by {|k| diffsecs[:new][k] }
+    different_sections |= diffsecs[:old].keys.sort_by {|k| diffsecs[:old][k] }
+    ret.concat different_sections
     ret
   end
 
@@ -1443,24 +1471,6 @@ End
     }
     out.puts if has_change_line
     has_change_line
-  end
-
-  def different_sections(tmp1, tmp2)
-    logfile1 = ChkBuild::LogFile.read_open(tmp1.path)
-    logfile2 = ChkBuild::LogFile.read_open(tmp2.path)
-    secnames1 = logfile1.secnames
-    secnames2 = logfile2.secnames
-    different_sections = secnames1 - secnames2
-    secnames2.each {|secname|
-      if !secnames1.include?(secname)
-        different_sections << secname
-      elsif logfile1.section_size(secname) != logfile2.section_size(secname)
-        different_sections << secname
-      elsif logfile1.get_section(secname) != logfile2.get_section(secname)
-        different_sections << secname
-      end
-    }
-    different_sections
   end
 
   def make_diff_content(time)
