@@ -28,8 +28,6 @@
 # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-require 'chkbuild'
-
 module ChkBuild::Ruby
   METHOD_LIST_SCRIPT = <<'End'
 use_symbol = Object.instance_methods[0].is_a?(Symbol)
@@ -218,8 +216,8 @@ def (ChkBuild::Ruby::CompleteOptions).call(target_opts)
 
   opts = target_opts.dup
   hs.each {|h|
-    h.each {|k, v|
-      opts[k] = v if !opts.include?(k)
+    h.each {|k1, v1|
+      opts[k1] = v1 if !opts.include?(k1)
     }
   }
 
@@ -277,7 +275,27 @@ def (ChkBuild::Ruby::CompleteOptions).merge_dependencies(opts, dep_dirs)
   opts
 end
 
-ChkBuild.define_build_proc('ruby') {|b|
+class ChkBuild::Ruby::RubyVersion
+  def initialize(version_info)
+    @ary = []
+    if version_info.has_key?('RUBY_VERSION')
+      @ary.concat version_info['RUBY_VERSION'].scan(/\d+/).map {|s| s.to_i }
+      if version_info.has_key?('RUBY_PATCHLEVEL')
+        @ary << version_info['RUBY_PATCHLEVEL'].to_i
+      end
+    end
+  end
+
+  def since(major,minor=0,teeny=0,patchlevel=-1)
+    ([major, minor, teeny, patchlevel] <=> @ary) <= 0
+  end
+
+  def before(major,minor=0,teeny=0,patchlevel=-1)
+    ([major, minor, teeny, patchlevel] <=> @ary) > 0
+  end
+end
+
+def (ChkBuild::Ruby).build_proc(b)
   bopts = b.opts
   ruby_branch = bopts[:ruby_branch]
   configure_args = Util.opts2aryparam(bopts, :configure_args)
@@ -305,19 +323,6 @@ ChkBuild.define_build_proc('ruby') {|b|
   if validate_dependencies
     cflags ||= []
     cflags += %w[-save-temps=obj]
-  end
-
-  large_cflags = nil
-  if %r{branches/ruby_1_8_} =~ ruby_branch && $' < "8"
-    large_cflags = []
-    large_cflags.concat cppflags
-    large_cflags.concat optflags if optflags
-    large_cflags.concat debugflags if debugflags
-    large_cflags.concat warnflags if warnflags
-    cppflags = nil
-    optflags = nil
-    debugflags = nil
-    warnflags = nil
   end
 
   ruby_build_dir = b.build_dir
@@ -352,6 +357,7 @@ ChkBuild.define_build_proc('ruby') {|b|
       RUBY_VERSION_TEENY
     ],
   }
+  version_info = {}
   if version_data.keys.any? {|fn| File.exist? fn }
     b.logfile.start_section 'version.h'
     version_data.each {|fn, version_macros|
@@ -360,11 +366,13 @@ ChkBuild.define_build_proc('ruby') {|b|
           if /\A\#\s*define\s+([A-Z_]+)\s+(\S.*)\n\z/ =~ line &&
              version_macros.include?($1)
             puts line
+            version_info[$1] = $2
           end
         }
       end
     }
   end
+  ruby_version = ChkBuild::Ruby::RubyVersion.new(version_info)
 
   if force_gperf
     b.run('gperf', '--version', :section=>'gperf-version')
@@ -389,6 +397,19 @@ ChkBuild.define_build_proc('ruby') {|b|
   use_rubyspec &&= b.catch_error {
     b.git('git://github.com/nurse/rubyspec.git', 'rubyspec', bopts)
   }
+
+  large_cflags = nil
+  if ruby_version.before(1,8,8)
+    large_cflags = []
+    large_cflags.concat cppflags
+    large_cflags.concat optflags if optflags
+    large_cflags.concat debugflags if debugflags
+    large_cflags.concat warnflags if warnflags
+    cppflags = nil
+    optflags = nil
+    debugflags = nil
+    warnflags = nil
+  end
 
   b.mkcd("ruby")
   args = []
@@ -569,10 +590,9 @@ ChkBuild.define_build_proc('ruby') {|b|
     if File.file? "#{srcdir}/KNOWNBUGS.rb"
       b.catch_error { b.make("test-knownbug", "OPTS=-v -q", make_options) }
     end
-    hide_skip_option = '--hide-skip '
-    if %r{branches/ruby_(\d+)_(\d+)_(\d+)} =~ ruby_branch &&
-       ([$1.to_i, $2.to_i, $3.to_i] <=> [1,9,2]) <= 0
-      hide_skip_option = ''
+    hide_skip_option = ''
+    if ruby_version.since(1,9,3)
+      hide_skip_option = '--hide-skip '
     end
     b.catch_error {
       parallel_option = ''
@@ -606,7 +626,7 @@ ChkBuild.define_build_proc('ruby') {|b|
       excludes = ["rubyspec/optional/ffi"]
       b.catch_error {
         FileUtils.rmtree "rubyspec_temp"
-        if %r{branches/ruby_1_8} =~ ruby_branch
+        if ruby_version.before(1,9)
           config = Dir.pwd + "/rubyspec/ruby.1.8.mspec"
         else
           config = Dir.pwd + "/rubyspec/ruby.1.9.mspec"
@@ -629,7 +649,7 @@ ChkBuild.define_build_proc('ruby') {|b|
             next if !s.file?
             b.catch_error {
               FileUtils.rmtree "rubyspec_temp"
-              if %r{branches/ruby_1_8} =~ ruby_branch
+              if ruby_version.before(1,9)
                 config = ruby_build_dir + "rubyspec/ruby.1.8.mspec"
               else
                 config = ruby_build_dir + "rubyspec/ruby.1.9.mspec"
@@ -650,13 +670,7 @@ ChkBuild.define_build_proc('ruby') {|b|
   Dir.chdir(ruby_build_dir)
   Dir.chdir('ruby') {
     relname = nil
-    case ruby_branch
-    when 'branches/ruby_1_9_2',
-         'branches/ruby_1_9_1',
-         'branches/ruby_1_8',
-         'branches/ruby_1_8_7',
-         'branches/ruby_1_8_6',
-         'branches/ruby_1_8_5'
+    if ruby_version.before(1,9,3)
       # "make dist" doesn't support BRANCH@rev.
       relname = nil
     else
@@ -667,6 +681,10 @@ ChkBuild.define_build_proc('ruby') {|b|
       b.make("dist", "RELNAME=#{relname}", "AUTOCONF=#{autoconf_command}")
     end
   }
+end
+
+ChkBuild.define_build_proc('ruby') {|b|
+  ChkBuild::Ruby.build_proc(b)
 }
 
 ChkBuild.define_title_hook('ruby', %w[svn/ruby version.h verconf.h]) {|title, logs|
@@ -793,7 +811,6 @@ ChkBuild.define_title_hook('ruby', "abi-check") {|title, log|
     str << "#{high}H" if high != 0
     str << "#{medium}M" if medium != 0
     #str << "#{low}L" if low != 0
-    str
     title.update_title(:status, str)
   end
 }
@@ -921,8 +938,13 @@ ChkBuild.define_diff_preprocess_gsub('ruby', /(\.so\b.*) \(0x[0-9A-Fa-f]+\)/) {|
 }
 
 # Generated on Thu Jun 6 10:17:43 2013 for libruby by ABI Compliance Checker 1.99
-ChkBuild.define_diff_preprocess_gsub('ruby', /Generated on .* for libruby by ABI Compliance Checker/) {|match|
+ChkBuild.define_diff_preprocess_gsub('ruby', /^ *Generated on .* for libruby by ABI Compliance Checker/) {|match|
   "Generated on <date> for libruby by ABI Compliance Checker"
+}
+
+# A tool for checking backward compatibility of a C/C++ library API
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{^ *A tool for checking backward compatibility of a C/C\+\+ library API}) {|match|
+  "A tool for checking backward compatibility of a C/C++ library API"
 }
 
 # btest since 2014-06-08

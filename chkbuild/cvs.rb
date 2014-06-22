@@ -28,9 +28,7 @@
 # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-require "uri"
-
-class ChkBuild::Build
+class ChkBuild::IBuild
   def cvs(cvsroot, mod, branch, opts={})
     network_access {
       cvs_internal(cvsroot, mod, branch, opts)
@@ -106,7 +104,7 @@ class ChkBuild::Build
     puts "CHECKOUT cvs #{cvsroot} #{mod} #{branch || ''}"
     h2.keys.sort.each {|k|
       f = k.flatten.join('/')
-      cvsroot2, repository2, r2 = h2[k] || [nil, nil, 'none']
+      _cvsroot2, _repository2, r2 = h2[k] || [nil, nil, 'none']
       digest = sha256_digest_file(f)
       puts "FILE #{f}\t#{r2}\t#{digest}"
     }
@@ -129,7 +127,9 @@ class ChkBuild::Build
       }
     }
   end
+end
 
+class ChkBuild::IFormat
   def output_cvs_change_lines(checkout_line, lines1, lines2, out)
     if /CHECKOUT cvs (\S+) (\S+) (\S*)\n/ !~ checkout_line
       out.puts "unexpected checkout line: #{checkout_line}"

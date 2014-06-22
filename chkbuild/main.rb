@@ -28,9 +28,6 @@
 # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-require 'pathname'
-require 'optparse'
-
 module ChkBuild
   TOP_DIRECTORY = Pathname.new(__FILE__).realpath.dirname.dirname
   SAMPLE_DIRECTORY = TOP_DIRECTORY + 'sample'
@@ -92,17 +89,24 @@ End
   end
 
   def ChkBuild.main_internal_build
-    depsuffixed_name = ARGV.shift
-    start_time = ARGV.shift
-    target_params_name = ARGV.shift
-    target_output_name = ARGV.shift
+    format_params_name = ARGV.shift
     File.umask(002)
     STDIN.reopen("/dev/null", "r")
     STDOUT.sync = true
     ChkBuild.build_top.mkpath
-    build, builthash = File.open(target_params_name) {|f| Marshal.load(f) }
-    ChkBuild::Build::BuiltHash.update builthash
-    build.internal_build start_time, target_output_name
+    ibuild = File.open(format_params_name) {|f| Marshal.load(f) }
+    ibuild.internal_build
+    exit 1
+  end
+
+  def ChkBuild.main_internal_format
+    format_params_name = ARGV.shift
+    File.umask(002)
+    STDIN.reopen("/dev/null", "r")
+    STDOUT.sync = true
+    ChkBuild.build_top.mkpath
+    iformat = File.open(format_params_name) {|f| Marshal.load(f) }
+    iformat.internal_format
     exit 1
   end
 
@@ -166,7 +170,8 @@ End
       t1 = arg_t1 || ts[-2]
       t2 = arg_t2 || ts[-1]
       puts "#{build.depsuffixed_name}: #{t1}->#{t2}"
-      build.output_diff(t1, t2, STDOUT)
+      iformat = build.iformat_new
+      iformat.output_diff(t1, t2, STDOUT)
       puts
     }
   end
@@ -179,7 +184,8 @@ End
       raise "no log: #{build.depsuffixed_name}/#{arg_t}" if arg_t and !ts.include?(arg_t)
       t = arg_t || ts[-1]
       puts "#{build.depsuffixed_name}: #{t}"
-      tmp = build.make_diff_content(t)
+      iformat = build.iformat_new
+      tmp = iformat.make_diff_content(t)
       tmp.rewind
       IO.copy_stream(tmp, STDOUT)
     }
@@ -197,7 +203,8 @@ End
       end
       t = arg_t || ts[-1]
       puts "#{build.depsuffixed_name}: #{t}"
-      build.output_fail(t, STDOUT)
+      iformat = build.iformat_new
+      iformat.output_fail(t, STDOUT)
       puts
     }
   end
@@ -209,6 +216,7 @@ End
     when 'help', '-h' then ChkBuild.main_help
     when 'build' then ChkBuild.main_build
     when 'internal-build' then ChkBuild.main_internal_build
+    when 'internal-format' then ChkBuild.main_internal_format
     when 'list' then ChkBuild.main_list
     when 'options' then ChkBuild.main_options
     when 'title' then ChkBuild.main_title

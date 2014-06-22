@@ -221,7 +221,7 @@ module Util
         return
       end
     end
-    cur_limit, max_limit = Process.getrlimit(resource)
+    _cur_limit, max_limit = Process.getrlimit(resource)
     Process.setrlimit(resource, max_limit, max_limit)
   end
 
@@ -233,7 +233,7 @@ module Util
         return
       end
     end
-    cur_limit, max_limit = Process.getrlimit(resource)
+    _cur_limit, max_limit = Process.getrlimit(resource)
     if max_limit < val
       val = max_limit
     end
@@ -288,6 +288,30 @@ module Util
         z.finish
       }
     }
+  end
+
+  def compress_file(src, dst)
+    Zlib::GzipWriter.wrap(open(dst, "w")) {|z|
+      open(src) {|f|
+        FileUtils.copy_stream(f, z)
+      }
+    }
+  end
+
+  def with_stdouterr(io)
+    sync_stdout = STDOUT.sync
+    save_stdout = STDOUT.dup
+    save_stderr = STDERR.dup
+    STDOUT.reopen(io)
+    STDERR.reopen(io)
+    begin
+      yield
+    ensure
+      STDOUT.reopen(save_stdout)
+      STDERR.reopen(save_stderr)
+      STDOUT.sync = sync_stdout
+      STDERR.sync = true
+    end
   end
 
   def with_tempfile(content) # :yield: tempfile

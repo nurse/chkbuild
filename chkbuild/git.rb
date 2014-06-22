@@ -28,15 +28,9 @@
 # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-require 'fileutils'
-require 'uri'
-require 'cgi'
-
-require 'pp'
-
 module ChkBuild; end # for testing
 
-class ChkBuild::Build
+class ChkBuild::IBuild
   def git_logfile(opts)
     with_templog(self.build_dir, "git.out.") {|outfile, outio|
       with_templog(self.build_dir, "git.err.") {|errfile, errio|
@@ -102,10 +96,8 @@ class ChkBuild::Build
 	}
       end
     }
-    old_head = nil
     if File.exist?(working_dir) && File.exist?("#{working_dir}/.git")
       Dir.chdir(working_dir) {
-        old_head = git_head_commit
         git_logfile(opts) {|opts2|
           self.run "git", "pull", opts2
         }
@@ -114,14 +106,6 @@ class ChkBuild::Build
       FileUtils.rm_rf(working_dir) if File.exist?(working_dir)
       pdir = File.dirname(working_dir)
       FileUtils.mkdir_p(pdir) if !File.directory?(pdir)
-      old_head = nil
-      if File.identical?(self.build_dir, '.') &&
-         !(ts = self.build_time_sequence - [self.start_time]).empty? &&
-         File.directory?(old_working_dir = self.target_dir + ts.last + working_dir)
-        Dir.chdir(old_working_dir) {
-          old_head = git_head_commit
-        }
-      end
       git_logfile(opts) {|opts2|
 	command = ["git", "clone", "-q"]
 	command << '--branch' << opts[:branch] if opts[:branch]
@@ -147,12 +131,23 @@ class ChkBuild::Build
   end
 
   def git_single_log(rev)
-    result = []
     command = "git log --max-count=1 #{rev}"
     IO.popen(command) {|f|
       f.read
     }
   end
+
+  def git_head_commit
+    IO.popen("git rev-list --max-count=1 HEAD") {|f|
+      # <sha1><LF>
+      # 4db0223676a371da8c4247d9a853529ef50a3b01
+      f.read.chomp
+    }
+  end
+end
+
+class ChkBuild::IFormat
+  GIT_SHARED_DIR = ChkBuild.build_top + 'git-repos'
 
   def git_oneline_logs2(old_head, new_head)
     result = []
@@ -168,14 +163,6 @@ class ChkBuild::Build
     }
     result.reverse!
     result
-  end
-
-  def git_head_commit
-    IO.popen("git rev-list --max-count=1 HEAD") {|f|
-      # <sha1><LF>
-      # 4db0223676a371da8c4247d9a853529ef50a3b01
-      f.read.chomp
-    }
   end
 
   def git_revisions
@@ -316,7 +303,7 @@ ChkBuild.define_file_changes_viewer('git',
   |match, reptype, pat, checkout_line|
   user = match[1]
   project = match[2]
-  ChkBuild::Build::GitHub.new("https://github.com/#{user}/#{project}")
+  ChkBuild::IFormat::GitHub.new("https://github.com/#{user}/#{project}")
 }
 
 ChkBuild.define_file_changes_viewer('git',
@@ -325,12 +312,12 @@ ChkBuild.define_file_changes_viewer('git',
   # git://git.savannah.gnu.org/autoconf.git
   # http://git.savannah.gnu.org/cgit/autoconf.git
   project_basename = match[1]
-  ChkBuild::Build::Cgit.new("http://git.savannah.gnu.org/cgit/#{project_basename}.git")
+  ChkBuild::IFormat::Cgit.new("http://git.savannah.gnu.org/cgit/#{project_basename}.git")
 
   # # GitWeb:
   # # http://git.savannah.gnu.org/gitweb/?p=autoconf.git
   # project_basename = CGI.escape(CGI.unescape($1)) # segment to query component
-  # ChkBuild::Build::GitWeb.new("http://git.savannah.gnu.org/gitweb/?p=#{project_basename}.git")
+  # ChkBuild::IFormat::GitWeb.new("http://git.savannah.gnu.org/gitweb/?p=#{project_basename}.git")
 }
 
 ChkBuild.define_title_hook(nil, %r{\Agit/}) {|title, logs|
