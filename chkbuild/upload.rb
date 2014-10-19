@@ -98,6 +98,9 @@ module ChkBuild
       server_start_time = body[/\tstart_time:(\w+)/, 1]
     rescue Azure::Core::Http::HTTPError
       server_start_time = '00000000T000000Z'
+      if e.type == 'ContainerNotFound'
+        azure_blob_service.create_container(container)
+      end
     end
     puts "Azure: #{branch} start_time: #{server_start_time}"
 
