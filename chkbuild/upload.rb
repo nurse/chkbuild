@@ -96,7 +96,7 @@ module ChkBuild
     begin
       res, body = service.get_blob(container, "#{branch}/recent.ltsv")
       server_start_time = body[/\tstart_time:(\w+)/, 1]
-    rescue Azure::Core::Http::HTTPError
+    rescue Azure::Core::Http::HTTPError => e
       server_start_time = '00000000T000000Z'
       if e.type == 'ContainerNotFound'
         azure_blob_service.create_container(container)
