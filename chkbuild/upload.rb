@@ -112,7 +112,7 @@ module ChkBuild
       next unless path.end_with?('.gz')
       next if path.start_with?(latest)
       path = "#{branch}/log/#{path}"
-      if azcp0(service, container, path, path)
+      if azcp0(service, container, path, "#{ChkBuild.public_top}/#{path}")
         File.unlink path
       end
     end
@@ -120,7 +120,7 @@ module ChkBuild
     %w[current.txt last.html.gz recent.ltsv summary.html summary.txt
       last.html last.txt recent.html rss summary.ltsv].each do |fn|
       path = "#{branch}/#{fn}"
-      self.azcp0(service, container, path, "#{ChkBuild.public_top}/#{path}")
+      azcp0(service, container, path, "#{ChkBuild.public_top}/#{path}")
     end
   end
 
