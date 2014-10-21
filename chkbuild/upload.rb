@@ -108,7 +108,7 @@ module ChkBuild
        break line[/\tstart_time:(\w+)/, 1]
     end
 
-    Dir.foreach("#{branch}/log") do |path|
+    Dir.foreach("#{ChkBuild.public_top}/#{branch}/log") do |path|
       next unless path.end_with?('.gz')
       next if path.start_with?(latest)
       path = "#{branch}/log/#{path}"
