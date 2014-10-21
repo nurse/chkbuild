@@ -113,7 +113,7 @@ module ChkBuild
       next if path.start_with?(latest)
       path = "#{branch}/log/#{path}"
       if azcp0(service, container, path, "#{ChkBuild.public_top}/#{path}")
-        File.unlink path
+        File.unlink "#{ChkBuild.public_top}/#{path}"
       end
     end
 
