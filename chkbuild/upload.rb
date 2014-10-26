@@ -111,8 +111,11 @@ module ChkBuild
     Dir.foreach("#{ChkBuild.public_top}/#{branch}/log") do |path|
       next unless path.end_with?('.gz')
       blobname = "#{branch}/log/#{path}"
-      next if (service.get_blob_metadata(container, blobname) rescue false)
       filepath = "#{ChkBuild.public_top}/#{blobname}"
+      if (service.get_blob_metadata(container, blobname) rescue false)
+        File.unlink filepath
+        next
+      end
       if azcp0(service, container, blobname, filepath) && !path.start_with?(latest)
         File.unlink filepath
       end
