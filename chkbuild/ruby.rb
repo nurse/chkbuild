@@ -873,8 +873,8 @@ ChkBuild.define_diff_preprocess_gsub('ruby', /^tcltklib: (.*)Ruby[\d.]+ \([\d-]+
 
 # + file miniruby
 # miniruby: ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), dynamically linked (uses shared libs), for GNU/Linux 2.6.26, BuildID[sha1]=0xd5a7c589cce09467a49e1792bc822ae48f75b5ee, not stripped
-ChkBuild.define_diff_preprocess_gsub('ruby', /BuildID\[sha1\]=0x[0-9a-f]+,/) {|match|
-  "BuildID[sha1]=0x<hex>"
+ChkBuild.define_diff_preprocess_gsub('ruby', /BuildID\[sha1\]=(?:0x)?[0-9a-f]+,/) {|match|
+  "BuildID[sha1]=<hex>"
 }
 
 # file.c:884: warning: comparison between signed and unsigned
@@ -1214,10 +1214,16 @@ ChkBuild.define_diff_preprocess_sort('ruby', /\A- returns self as a symbol liter
 # ruby ./tool/make-snapshot tmp branches/ruby_1_9_3@32655
 # Exporting branches/ruby_1_9_3@32655
 #
+# + make RELNAME=trunk@48875 AUTOCONF=autoconf dist
+# ruby --disable=gems ./tool/make-snapshot -srcdir=. tmp trunk@48875
+# Exporting trunk@48875
+# Exported revision 48875.
+#
 ChkBuild.define_diff_preprocess_gsub('ruby', %r{(RELNAME=[0-9A-Za-z/_.-]+@)\d+}) {|match| "#{match[1]}<rev>" }
 ChkBuild.define_diff_preprocess_gsub('ruby', %r{(make-snapshot tmp [0-9A-Za-z/_.-]+@)\d+}) {|match| "#{match[1]}<rev>" }
 ChkBuild.define_diff_preprocess_gsub('ruby', %r{(Exporting [0-9A-Za-z/_.-]+@)\d+}) {|match| "#{match[1]}<rev>" }
 ChkBuild.define_diff_preprocess_gsub('ruby', %r{(Exported revision )\d+}) {|match| "#{match[1]}<rev>" }
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{(make-snapshot .* [0-9A-Za-z/_.-]+@)\d+}) {|match| "#{match[1]}<rev>" }
 
 # make dist
 # make[1]: Entering directory `/home/akr/chkbuild/tmp/build/ruby-trunk/<buildtime>/tmp/ruby-snapshot20100821-16136-p60p7s/ruby-1.9.3-r29063'
