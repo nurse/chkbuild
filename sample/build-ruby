@@ -53,7 +53,7 @@ require 'chkbuild'
 # ChkBuild.top_uri = "file://#{ChkBuild.public_top}/"
 # ChkBuild.top_uri = nil # use relative URL
 
-# ChkBuild.azure_upload_target
+ChkBuild.azure_upload_target rescue nil
 arg = [].push(
   [
     { :suffix_? => 'trunk', :output_interval_timeout => '10min' },
