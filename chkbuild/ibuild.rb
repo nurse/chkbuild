@@ -430,18 +430,6 @@ class ChkBuild::IBuild # internal build
         limit[$'.intern] = v if /\Ar?limit_/ =~ k.to_s && v
       }
       ruby_script << <<-"End"
-        def resource_unlimit(resource)
-          if Symbol === resource
-            begin
-              resource = Process.const_get(resource)
-            rescue NameError
-              return
-            end
-          end
-          cur_limit, max_limit = Process.getrlimit(resource)
-          Process.setrlimit(resource, max_limit, max_limit)
-        end
-
         def resource_limit(resource, val)
           if Symbol === resource
             begin
@@ -450,23 +438,32 @@ class ChkBuild::IBuild # internal build
               return
             end
           end
-          cur_limit, max_limit = Process.getrlimit(resource)
-          if max_limit < val
-            val = max_limit
+          _cur_limit, max_limit = Process.getrlimit(resource)
+          case val
+          when Integer
+            if max_limit < val
+              val = max_limit
+            end
+            Process.setrlimit(resource, val, val)
+          when :unlimited
+            Process.setrlimit(resource, max_limit, max_limit)
+          else
+            raise ArgumentError, "unexpected resource value"
           end
-          Process.setrlimit(resource, val, val)
         end
-
-        resource_unlimit(:RLIMIT_CORE)
-	v = #{limit.has_key?(:cpu) ? limit[:cpu].to_i : "nil" }
-	resource_limit(:RLIMIT_CPU, v) if v
-	v = #{limit.has_key?(:stack) ? limit[:stack].to_i : "nil" }
-	resource_limit(:RLIMIT_STACK, v) if v
-	v = #{limit.has_key?(:data) ? limit[:data].to_i : "nil" }
-	resource_limit(:RLIMIT_DATA, v) if v
-	v = #{limit.has_key?(:as) ? limit[:as].to_i : "nil" }
-	resource_limit(:RLIMIT_AS, v) if v
       End
+
+      %w[core cpu stack data as].each {|res|
+        if limit.has_key?(res.intern)
+          v = limit[res.intern]
+          if limit[res.intern] == :unlimited
+            ruby_script << "v = :unlimited\n"
+          else
+            ruby_script << "v = #{v.to_i}\n"
+          end
+          ruby_script << "resource_limit(:RLIMIT_#{res.upcase}, v)\n"
+        end
+      }
     end
 
     if opts.include?(:stdout)
