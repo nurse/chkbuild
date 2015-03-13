@@ -111,6 +111,7 @@ when /\ALinux/
 when /\AFreeBSD/
   ENV['PATH'] = "#{ENV['PATH']}:/usr/local/bin"
   h[:configure_args_with_opt_dir] = %w[--with-opt-dir=/usr/local]
+  h[:optflags] = '-O3 -mfpmath=sse -msse2' if /i.86/ =~ uname
 end
 
 autoconf_command = '/home/naruse/local/autoconf/bin/autoconf'
