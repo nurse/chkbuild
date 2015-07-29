@@ -172,4 +172,94 @@ module ChkBuild
     end
     true
   end
+
+  # S3
+  #
+  # == Usage
+  # Add `ChkBuild.s3_upload_target` to sample/build-ruby
+  #
+  # == Environmental Variables
+  # * AZURE_STORAGE_ACCOUNT
+  # * AZURE_STORAGE_ACCESS_KEY
+
+  def self.s3_upload_target
+    bucket_name = 'rubyci'
+    region = 'ap-northeast-1'
+    require 'aws-sdk'
+    AWS.config(
+      :access_key_id => ENV['AWS_ACCESS_KEY_ID'],
+      :secret_access_key => ENV['AWS_SECRET_ACCESS_KEY'])
+    bucket = Aws::S3::Resource.new(region: region).bucket(bucket_name)
+    self.add_upload_hook {|depsuffixed_name|
+      self.do_upload_s3(bucket, depsuffixed_name)
+    }
+    Dir.foreach(s3_localpath("")) do |depsuffixed_name|
+      self.do_upload_s3(bucket, depsuffixed_name)
+    end
+  end
+
+  def self.do_upload_s3(bucket, branch)
+    obj = bucket.object(s3_remotepath("#{branch}/recent.ltsv"))
+    last_modified = obj.last_modified
+
+    puts "S3: #{branch} last_modified: #{last_modified}"
+
+    Dir.foreach(s3_localpath("#{branch}/log")) do |path|
+      next unless path.end_with?('.gz')
+      path = "#{branch}/log/#{path}"
+      if s3sync(bucket, path)
+        # upload success
+        if path.end_with?('.html.gz') &&
+          IO.read(s3_localpath(path), 1000).include?('placeholder_start')
+          next
+        end
+        File.unlink filepath
+      end
+    end
+
+    %w[current.txt last.html.gz recent.ltsv summary.html summary.txt
+      last.html last.txt recent.html rss summary.ltsv].each do |fn|
+      path = "#{branch}/#{fn}"
+      s3sync(bucket, path)
+    end
+  end
+
+  def s3_localpath(path)
+    "#{Chkbuild.public_top}/#{path}"
+  end
+
+  def s3_remotepath(path)
+    "#{Chkbuild.nickname}/#{path}"
+  end
+
+  def self.s3sync(bucket, path)
+    blobname = s3_remotepath(path)
+    filepath = s3_localpath(path)
+    unless File.exist?(filepath)
+      warn "file '#{filepath}' is not found"
+      return false
+    end
+
+    options = {}
+    case path
+    when /\.txt\.gz\z/
+      options[:content_type] = 'text/plain'
+      options[:content_encoding] = 'gzip'
+    when /\.html\.gz\z/
+      options[:content_type] = 'text/html'
+      options[:content_encoding] = 'gzip'
+    when /\.(?:ltsv|txt)\z/
+      options[:content_type] = 'text/plain'
+    when /\.html\z/
+      options[:content_type] = 'text/html'
+    when /(?:\A|\/)rss\z/
+      options[:content_type] = 'application/rss+xml'
+    else
+      warn "no content_type is defined for #{filepath}"
+    end
+
+    puts "uploading '#{filepath}' to #{blobname}..."
+    bucket.object(blobname).upload_file(filepath, options)
+    true
+  end
 end
