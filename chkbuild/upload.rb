@@ -179,28 +179,26 @@ module ChkBuild
   # Add `ChkBuild.s3_upload_target` to sample/build-ruby
   #
   # == Environmental Variables
-  # * AZURE_STORAGE_ACCOUNT
-  # * AZURE_STORAGE_ACCESS_KEY
+  #  :access_key_id => ENV['AWS_ACCESS_KEY_ID'],
+  #  :secret_access_key => ENV['AWS_SECRET_ACCESS_KEY'])
 
   def self.s3_upload_target
     bucket_name = 'rubyci'
     region = 'ap-northeast-1'
     require 'aws-sdk'
-    AWS.config(
-      :access_key_id => ENV['AWS_ACCESS_KEY_ID'],
-      :secret_access_key => ENV['AWS_SECRET_ACCESS_KEY'])
     bucket = Aws::S3::Resource.new(region: region).bucket(bucket_name)
     self.add_upload_hook {|depsuffixed_name|
       self.do_upload_s3(bucket, depsuffixed_name)
     }
     Dir.foreach(s3_localpath("")) do |depsuffixed_name|
+      next if depsuffixed_name.start_with?('.')
       self.do_upload_s3(bucket, depsuffixed_name)
     end
   end
 
   def self.do_upload_s3(bucket, branch)
     obj = bucket.object(s3_remotepath("#{branch}/recent.ltsv"))
-    last_modified = obj.last_modified
+    last_modified = obj.last_modified rescue nil
 
     puts "S3: #{branch} last_modified: #{last_modified}"
 
@@ -209,8 +207,9 @@ module ChkBuild
       path = "#{branch}/log/#{path}"
       if s3sync(bucket, path)
         # upload success
+        filepath = s3_localpath(path)
         if path.end_with?('.html.gz') &&
-          IO.read(s3_localpath(path), 1000).include?('placeholder_start')
+          IO.read(filepath, 1000).include?('placeholder_start')
           next
         end
         File.unlink filepath
@@ -224,12 +223,12 @@ module ChkBuild
     end
   end
 
-  def s3_localpath(path)
-    "#{Chkbuild.public_top}/#{path}"
+  def self.s3_localpath(path)
+    "#{ChkBuild.public_top}/#{path}"
   end
 
-  def s3_remotepath(path)
-    "#{Chkbuild.nickname}/#{path}"
+  def self.s3_remotepath(path)
+    "#{ChkBuild.nickname}/#{path}"
   end
 
   def self.s3sync(bucket, path)
