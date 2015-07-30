@@ -202,8 +202,10 @@ module ChkBuild
 
     puts "S3: #{branch} last_modified: #{last_modified}"
 
+    now = Time.now
     Dir.foreach(s3_localpath("#{branch}/log")) do |path|
       next unless path.end_with?('.gz')
+      next if now - File.mtime(filepath) < 1000
       path = "#{branch}/log/#{path}"
       if s3sync(bucket, path)
         # upload success
