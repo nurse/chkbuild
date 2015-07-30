@@ -205,11 +205,11 @@ module ChkBuild
     now = Time.now
     Dir.foreach(s3_localpath("#{branch}/log")) do |path|
       next unless path.end_with?('.gz')
-      next if now - File.mtime(filepath) < 1000
       path = "#{branch}/log/#{path}"
+      filepath = s3_localpath(path)
+      next if now - File.mtime(filepath) < 1000
       if s3sync(bucket, path)
         # upload success
-        filepath = s3_localpath(path)
         if path.end_with?('.html.gz') &&
           IO.read(filepath, 1000).include?('placeholder_start')
           next
