@@ -192,11 +192,11 @@ module ChkBuild
     }
     Dir.foreach(s3_localpath("")) do |depsuffixed_name|
       next if depsuffixed_name.start_with?('.')
-      self.do_upload_s3(bucket, depsuffixed_name)
+      self.do_upload_s3(bucket, depsuffixed_name, true)
     end
   end
 
-  def self.do_upload_s3(bucket, branch)
+  def self.do_upload_s3(bucket, branch, pre=false)
     obj = bucket.object(s3_remotepath("#{branch}/recent.ltsv"))
     last_modified = obj.last_modified rescue nil
 
@@ -207,7 +207,7 @@ module ChkBuild
       next unless path.end_with?('.gz')
       path = "#{branch}/log/#{path}"
       filepath = s3_localpath(path)
-      next if now - File.mtime(filepath) < 1000
+      next if pre && now - File.mtime(filepath) < 1000
       if s3sync(bucket, path)
         # upload success
         if path.end_with?('.html.gz') &&
