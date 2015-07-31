@@ -222,7 +222,7 @@ module ChkBuild
       last.html last.txt recent.html rss summary.ltsv].each do |fn|
       path = "#{branch}/#{fn}"
       s3sync(bucket, path)
-    end
+    end unless pre
   end
 
   def self.s3_localpath(path)
