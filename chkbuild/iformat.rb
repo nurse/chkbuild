@@ -217,8 +217,8 @@ class ChkBuild::IFormat # internal format
     failure = detect_failure(@t)
     @current_status = (failure || :success).to_s
     @has_neterror = failure == :netfail
-    @older_time, older_time_failure = find_diff_target_time(@t)
-    @older_status = @older_time ? (older_time_failure || :success).to_s : nil
+    @older_time, @older_time_failure = find_diff_target_time(@t)
+    @older_status = @older_time ? (@older_time_failure || :success).to_s : nil
     @compressed_older_loghtml_relpath = @older_time ? "#{@depsuffixed_name}/log/#{@older_time}.log.html.gz" : nil
     @compressed_older_failhtml_relpath = @older_time ? "#{@depsuffixed_name}/log/#{@older_time}.fail.html.gz" : nil
     @compressed_older_diffhtml_relpath = @older_time ? "#{@depsuffixed_name}/log/#{@older_time}.diff.html.gz" : nil
