@@ -35,10 +35,10 @@ module ChkBuild
     @upload_hook << block
   end
 
-  def self.run_upload_hooks(depsuffixed_name, iformat)
+  def self.run_upload_hooks(depsuffixed_name)
     @upload_hook.reverse_each {|block|
       begin
-        block.call depsuffixed_name, iformat
+        block.call depsuffixed_name
       rescue Exception
         p $!
       end
@@ -187,24 +187,20 @@ module ChkBuild
     region = 'ap-northeast-1'
     require 'aws-sdk'
     bucket = Aws::S3::Resource.new(region: region).bucket(bucket_name)
-    self.add_upload_hook {|depsuffixed_name, iformat|
-      self.do_upload_s3(bucket, depsuffixed_name, iformat)
+    self.add_upload_hook {|depsuffixed_name|
+      self.do_upload_s3(bucket, depsuffixed_name)
     }
-    Dir.foreach(s3_localpath("")) do |depsuffixed_name, iformat|
+    Dir.foreach(s3_localpath("")) do |depsuffixed_name|
       next if depsuffixed_name.start_with?('.')
-      self.do_upload_s3(iformat, bucket, depsuffixed_name, true)
+      self.do_upload_s3(bucket, depsuffixed_name, true)
     end
   end
 
-  def self.do_upload_s3(iformat, bucket, branch, pre=false)
+  def self.do_upload_s3(bucket, branch, pre=false)
     obj = bucket.object(s3_remotepath("#{branch}/recent.ltsv"))
     last_modified = obj.last_modified rescue nil
 
     puts "S3: #{branch} last_modified: #{last_modified}"
-
-    keep = []
-    keep << iformat.instance_variable_get(:@older_time)
-    keep << iformat.instance_variable_get(:@older_time_failure)
 
     now = Time.now
     Dir.foreach(s3_localpath("#{branch}/log")) do |path|
@@ -218,9 +214,7 @@ module ChkBuild
           IO.read(filepath, 1000).include?('placeholder_start')
           next
         end
-        unless keep.include?(path[0, 16])
-          File.unlink filepath
-        end
+        File.unlink filepath
       end
     end
 

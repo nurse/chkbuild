@@ -175,7 +175,7 @@ class ChkBuild::Build
       $?.success?
     }
 
-    run_upload_hooks(@build_dir + 'log', iformat)
+    run_upload_hooks(@build_dir + 'log')
 
     return status && status2
   end
@@ -190,10 +190,10 @@ class ChkBuild::Build
       @target, @suffixes, @suffixed_name, @depsuffixed_name, @opts)
   end
 
-  def run_upload_hooks(log_filename, iformat)
+  def run_upload_hooks(log_filename)
     File.open(log_filename, 'a') {|f|
       with_stdouterr(f) {
-        ChkBuild.run_upload_hooks(@depsuffixed_name, iformat)
+        ChkBuild.run_upload_hooks(@depsuffixed_name)
       }
     }
   end
