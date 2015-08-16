@@ -214,7 +214,7 @@ module ChkBuild
           IO.read(filepath, 1000).include?('placeholder_start')
           next
         end
-        File.unlink filepath
+        # File.unlink filepath # temporaly don't remove logs
       end
     end
 
