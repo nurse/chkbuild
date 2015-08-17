@@ -190,31 +190,35 @@ module ChkBuild
     self.add_upload_hook {|depsuffixed_name|
       self.do_upload_s3(bucket, depsuffixed_name)
     }
-    Dir.foreach(s3_localpath("")) do |depsuffixed_name|
-      next if depsuffixed_name.start_with?('.')
-      self.do_upload_s3(bucket, depsuffixed_name, true)
-    end
   end
 
-  def self.do_upload_s3(bucket, branch, pre=false)
-    obj = bucket.object(s3_remotepath("#{branch}/recent.ltsv"))
-    last_modified = obj.last_modified rescue nil
-
-    puts "S3: #{branch} last_modified: #{last_modified}"
+  def self.do_upload_s3(bucket, branch)
+    cmd = %w[gzgrep zgrep].find{|x|spawn(x, '-V', out: IO::NULL) rescue nil}
+    keep = []
+    require 'open3'
+    logdir = s3_localpath("#{branch}/log")
+    res, _ = Open3.capture2('find', logdir, '-name', '*.fail.html.gz', '-exec', cmd,'-Hm1','placeholder_start','{}',';')
+    res.each_line do |line|
+      # 20150816T150308Z.fail.html.gz:      <!--placeholder_start-->NewerDiff<!--placeholder_end--> &gt;
+      keep << line[logdir.size+1, 16]
+    end
+    puts"keep: #{keep}"
 
     now = Time.now
-    Dir.foreach(s3_localpath("#{branch}/log")) do |path|
-      next unless path.end_with?('.gz')
-      path = "#{branch}/log/#{path}"
+    Dir.foreach(logdir) do |filename|
+      next unless filename.end_with?('.gz')
+      path = "#{branch}/log/#{filename}"
       filepath = s3_localpath(path)
-      next if pre && now - File.mtime(filepath) < 1000
       if s3sync(bucket, path)
         # upload success
         if path.end_with?('.html.gz') &&
           IO.read(filepath, 1000).include?('placeholder_start')
           next
         end
-        # File.unlink filepath # temporaly don't remove logs
+        unless keep.include?(filename[0, 16])
+          puts "remove: #{filename}"
+          #File.unlink filepath # temporaly don't remove logs
+        end
       end
     end
 
@@ -222,7 +226,7 @@ module ChkBuild
       last.html last.txt recent.html rss summary.ltsv].each do |fn|
       path = "#{branch}/#{fn}"
       s3sync(bucket, path)
-    end unless pre
+    end
   end
 
   def self.s3_localpath(path)
@@ -262,5 +266,17 @@ module ChkBuild
     puts "uploading '#{filepath}' to #{blobname}..."
     bucket.object(blobname).upload_file(filepath, options)
     true
+  end
+end
+
+if __FILE__ == $0
+  require 'pathname'
+  require_relative 'main'
+  def ChkBuild.main; end
+  load File.expand_path('../../start-build', __FILE__)
+
+  Dir.foreach(ChkBuild.s3_localpath("")) do |depsuffixed_name|
+    next unless depsuffixed_name.start_with?('ruby-')
+    ChkBuild.run_upload_hooks(depsuffixed_name)
   end
 end
