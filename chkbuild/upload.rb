@@ -217,7 +217,7 @@ module ChkBuild
         end
         unless keep.include?(filename[0, 16])
           puts "remove: #{filename}"
-          #File.unlink filepath # temporaly don't remove logs
+          File.unlink filepath # temporaly don't remove logs
         end
       end
     end
