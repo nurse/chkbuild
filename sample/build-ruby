@@ -117,6 +117,7 @@ end
 
 autoconf_command = '/home/naruse/local/autoconf/bin/autoconf'
 h[:autoconf_command] = autoconf_command if File.exist?(autoconf_command)
+h[:configure_args] = ["--with-baseruby=#{RbConfig.ruby}"]
 
 ChkBuild::Ruby.def_target(*arg)
 
