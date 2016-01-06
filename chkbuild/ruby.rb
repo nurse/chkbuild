@@ -328,15 +328,6 @@ def (ChkBuild::Ruby).build_proc(b)
       RUBY_VERSION_MINOR
       RUBY_VERSION_TEENY
     ],
-    'reivision.h' => %w[
-      RUBY_BRANCH_NAME
-      RUBY_REVISION
-    ],
-    'include/ruby/version.h' => %w[
-      RUBY_API_VERSION_MAJOR
-      RUBY_API_VERSION_MINOR
-      RUBY_API_VERSION_TEENY
-    ],
   }
   version_info = {}
   if version_data.keys.any? {|fn| File.exist? fn }
@@ -661,19 +652,7 @@ ChkBuild.define_title_hook('ruby', %w[svn/ruby version.h verconf.h]) {|title, lo
   log = logs.join('')
   lastrev = /^Last Changed Rev: (\d+)$/.match(log)
   version = /^#\s*define RUBY_VERSION "(\S+)"/.match(log)
-  unless version
-    major = log[/RUBY_API_VERSION_MAJOR\s+(\d+)/, 1]
-    minor = log[/RUBY_API_VERSION_MINOR\s+(\d+)/, 1]
-    teeny = log[/RUBY_API_VERSION_TEENY\s+(\d+)/, 1]
-    version = "#{major}.#{minor}.#{teeny}" if major && minor && teeny
-  end
   reldate = /^#\s*define RUBY_RELEASE_DATE "(\S+)"/.match(log)
-  unless reldate
-    year  = log[/RUBY_RELEASE_YEAR\s+(\d+)/, 1]
-    month = log[/RUBY_RELEASE_MONTH\s+(\d+)/, 1]
-    day   = log[/RUBY_RELEASE_DAY\s+(\d+)/, 1]
-    reldate = "#{year}-#{month}-#{day}" if year && month && day
-  end
   patchlev = /^#\s*define RUBY_PATCHLEVEL (\S+)/.match(log)
   platform = /^#\s*define RUBY_PLATFORM "(\S+)"/.match(log)
   if lastrev
