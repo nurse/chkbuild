@@ -29,7 +29,14 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 module ChkBuild
-  TOP_DIRECTORY = Pathname.new(__FILE__).realpath.dirname.dirname
+  case machine = `uname -n`.strip
+  when 'unstable10x'
+    TOP_DIRECTORY = Pathname.new("/export/home/rubyci/chkbuild-tmp/")
+  when /unstable/
+    TOP_DIRECTORY = Pathname.new("/home/rubyci/#{machine}/")
+  else
+    TOP_DIRECTORY = Pathname.new(__FILE__).realpath.dirname.dirname
+  end
   SAMPLE_DIRECTORY = TOP_DIRECTORY + 'sample'
   def ChkBuild.build_top() TOP_DIRECTORY+"tmp/build" end
   def ChkBuild.public_top() TOP_DIRECTORY+"tmp/public_html" end
