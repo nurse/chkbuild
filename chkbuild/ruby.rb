@@ -328,6 +328,15 @@ def (ChkBuild::Ruby).build_proc(b)
       RUBY_VERSION_MINOR
       RUBY_VERSION_TEENY
     ],
+    'reivision.h' => %w[
+      RUBY_BRANCH_NAME
+      RUBY_REVISION
+    ],
+    'include/ruby/version.h' => %w[
+      RUBY_API_VERSION_MAJOR
+      RUBY_API_VERSION_MINOR
+      RUBY_API_VERSION_TEENY
+    ],
   }
   version_info = {}
   if version_data.keys.any? {|fn| File.exist? fn }
@@ -343,6 +352,16 @@ def (ChkBuild::Ruby).build_proc(b)
         }
       end
     }
+  end
+  if /\A\d+\.\d+\.\d+\z/ !~ version_info['RUBY_VERSION']
+    version_info['RUBY_VERSION'] = version_info.values_at(
+      *%w[MAJOR MINOR TEENY].map{|s|"RUBY_API_VERSION_#{s}"}
+    ).join('.')
+  end
+  if /\A\d+-\d+-\d+\z/ !~ version_info['RUBY_RELEASE_DATE']
+    version_info['RUBY_RELEASE_DATE'] = version_info.values_at(
+      *%w[YEAR MONTH DAY].map{|s|"RUBY_RELEASE_#{s}"}
+    ).join('.')
   end
   ruby_version = ChkBuild::Ruby::RubyVersion.new(version_info)
 
