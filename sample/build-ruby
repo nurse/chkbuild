@@ -109,7 +109,6 @@ case uname = `uname -srm`
 when /\ALinux/
   ENV['HOME'] = "/home/#{ENV['USER']}" if File.exist?('/etc/redhat-release')
   h[:optflags] = '-O3 -mfpmath=sse -msse2' if /i.86/ =~ uname
-  arg[0].slice!(1,9) if ChkBuild.nickname == 'tk2-243-31075'
 when /\AFreeBSD/
   ENV['PATH'] = "#{ENV['PATH']}:/usr/local/bin"
   h[:configure_args_with_opt_dir] = %w[--with-opt-dir=/usr/local]
@@ -121,6 +120,11 @@ when /\ASunOS/
   if `uname -p` == 'sparc'
     h[:configure_args_openssl] = %w[--with-openssl-config=/home/rubyci/bin/openssl-config --with-openssl-dir=/opt/csw]
   end
+  arg[0].slice!(1,9)
+end
+
+case ChkBuild.nickname
+when 'scw-9d6766', 'tk2-243-31075', 'armv8b'
   arg[0].slice!(1,9)
 end
 
