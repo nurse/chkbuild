@@ -116,7 +116,6 @@ when /\AFreeBSD/
 when /\ASunOS/
   h[:configure_args_disable_werror] = %w[--disable-werror]
 #  h[:configure_args_cc] = %w[CC=/opt/solarisstudio12.4/bin/cc]
-  h[:configure_args_disable_install_doc] = ["--disable-install-doc"]
   if `uname -p` == 'sparc'
     h[:configure_args_openssl] = %w[--with-openssl-config=/home/rubyci/bin/openssl-config --with-openssl-dir=/opt/csw]
   end
