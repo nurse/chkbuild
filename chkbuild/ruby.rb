@@ -677,8 +677,8 @@ ChkBuild.define_build_proc('ruby') {|b|
 ChkBuild.define_title_hook('ruby', %w[svn/ruby version.h verconf.h]) {|title, logs|
   log = logs.join('')
   lastrev = /^Last Changed Rev: (\d+)$/.match(log)
-  version = /^#\s*define RUBY_VERSION "(\d\S+)"/.match(log)
-  reldate = /^#\s*define RUBY_RELEASE_DATE "(\d\S+)"/.match(log)
+  version = /^#\s*define RUBY_VERSION "(\S+)"/.match(log)
+  reldate = /^#\s*define RUBY_RELEASE_DATE "(\S+)"/.match(log)
   patchlev = /^#\s*define RUBY_PATCHLEVEL (\S+)/.match(log)
   platform = /^#\s*define RUBY_PLATFORM "(\S+)"/.match(log)
   if lastrev
