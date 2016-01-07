@@ -357,13 +357,16 @@ def (ChkBuild::Ruby).build_proc(b)
     version_info['RUBY_VERSION'] = version_info.values_at(
       *%w[MAJOR MINOR TEENY].map{|s|"RUBY_API_VERSION_#{s}"}
     ).join('.')
+    puts version_info['RUBY_VERSION']
   end
   if /\A\d+-\d+-\d+\z/ !~ version_info['RUBY_RELEASE_DATE']
     version_info['RUBY_RELEASE_DATE'] = version_info.values_at(
       *%w[YEAR MONTH DAY].map{|s|"RUBY_RELEASE_#{s}"}
-    ).join('.')
+    ).join('-')
+    puts version_info['RUBY_RELEASE_DATE']
   end
   ruby_version = ChkBuild::Ruby::RubyVersion.new(version_info)
+  puts "ruby_version: #{ruby_version}"
 
   if force_gperf
     b.run('gperf', '--version', :section=>'gperf-version')
