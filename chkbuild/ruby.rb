@@ -265,6 +265,10 @@ class ChkBuild::Ruby::RubyVersion
   def before(major,minor=0,teeny=0,patchlevel=-1)
     ([major, minor, teeny, patchlevel] <=> @ary) > 0
   end
+
+  def inspect
+    "#<ChkBuild::Ruby::RubyVersion:#@ary>"
+  end
 end
 
 def (ChkBuild::Ruby).build_proc(b)
@@ -357,13 +361,13 @@ def (ChkBuild::Ruby).build_proc(b)
     version_info['RUBY_VERSION'] = version_info.values_at(
       *%w[MAJOR MINOR TEENY].map{|s|"RUBY_API_VERSION_#{s}"}
     ).join('.')
-    puts version_info['RUBY_VERSION']
+    puts "#define RUBY_VERSION #{version_info['RUBY_VERSION']}"
   end
   if /\A\d+-\d+-\d+\z/ !~ version_info['RUBY_RELEASE_DATE']
-    version_info['RUBY_RELEASE_DATE'] = version_info.values_at(
+    version_info['RUBY_RELEASE_DATE'] = '%04d-%02d-%02d' % version_info.values_at(
       *%w[YEAR MONTH DAY].map{|s|"RUBY_RELEASE_#{s}"}
-    ).join('-')
-    puts version_info['RUBY_RELEASE_DATE']
+    ).map(&:to_i)
+    puts "#define RUBY_RELEASE_DATE #{version_info['RUBY_RELEASE_DATE']}"
   end
   ruby_version = ChkBuild::Ruby::RubyVersion.new(version_info)
   puts "ruby_version: #{ruby_version}"
@@ -673,8 +677,8 @@ ChkBuild.define_build_proc('ruby') {|b|
 ChkBuild.define_title_hook('ruby', %w[svn/ruby version.h verconf.h]) {|title, logs|
   log = logs.join('')
   lastrev = /^Last Changed Rev: (\d+)$/.match(log)
-  version = /^#\s*define RUBY_VERSION "(\S+)"/.match(log)
-  reldate = /^#\s*define RUBY_RELEASE_DATE "(\S+)"/.match(log)
+  version = /^#\s*define RUBY_VERSION "(\d\S+)"/.match(log)
+  reldate = /^#\s*define RUBY_RELEASE_DATE "(\d\S+)"/.match(log)
   patchlev = /^#\s*define RUBY_PATCHLEVEL (\S+)/.match(log)
   platform = /^#\s*define RUBY_PLATFORM "(\S+)"/.match(log)
   if lastrev
