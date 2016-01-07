@@ -266,7 +266,7 @@ class ChkBuild::Ruby::RubyVersion
     ([major, minor, teeny, patchlevel] <=> @ary) > 0
   end
 
-  def inspect
+  def to_s
     "#<ChkBuild::Ruby::RubyVersion:#@ary>"
   end
 end
@@ -370,7 +370,6 @@ def (ChkBuild::Ruby).build_proc(b)
     puts %<"#define RUBY_RELEASE_DATE "#{version_info['RUBY_RELEASE_DATE']}">
   end
   ruby_version = ChkBuild::Ruby::RubyVersion.new(version_info)
-  puts "ruby_version: #{ruby_version}"
 
   if force_gperf
     b.run('gperf', '--version', :section=>'gperf-version')
