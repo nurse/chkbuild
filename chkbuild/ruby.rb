@@ -265,10 +265,6 @@ class ChkBuild::Ruby::RubyVersion
   def before(major,minor=0,teeny=0,patchlevel=-1)
     ([major, minor, teeny, patchlevel] <=> @ary) > 0
   end
-
-  def to_s
-    "#<ChkBuild::Ruby::RubyVersion:#@ary>"
-  end
 end
 
 def (ChkBuild::Ruby).build_proc(b)
@@ -332,15 +328,6 @@ def (ChkBuild::Ruby).build_proc(b)
       RUBY_VERSION_MINOR
       RUBY_VERSION_TEENY
     ],
-    'reivision.h' => %w[
-      RUBY_BRANCH_NAME
-      RUBY_REVISION
-    ],
-    'include/ruby/version.h' => %w[
-      RUBY_API_VERSION_MAJOR
-      RUBY_API_VERSION_MINOR
-      RUBY_API_VERSION_TEENY
-    ],
   }
   version_info = {}
   if version_data.keys.any? {|fn| File.exist? fn }
@@ -356,12 +343,6 @@ def (ChkBuild::Ruby).build_proc(b)
         }
       end
     }
-  end
-  if /\A\d+\.\d+\.\d+\z/ !~ version_info['RUBY_VERSION']
-    version_info['RUBY_VERSION'] = version_info.values_at(
-      *%w[MAJOR MINOR TEENY].map{|s|"RUBY_API_VERSION_#{s}"}
-    ).join('.')
-    puts %<#define RUBY_VERSION "#{version_info['RUBY_VERSION']}">
   end
   if /\A\d+-\d+-\d+\z/ !~ version_info['RUBY_RELEASE_DATE']
     version_info['RUBY_RELEASE_DATE'] = '%04d-%02d-%02d' % version_info.values_at(
