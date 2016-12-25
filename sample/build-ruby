@@ -98,7 +98,7 @@ arg = [].push(
 
   # :old => 1,
 
-  :timeout => '1h',
+  :timeout => '2h',
 
   :output_interval_timeout => '5min'
   )
