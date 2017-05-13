@@ -106,7 +106,7 @@ End
   DOMAINLABEL = /[A-Za-z0-9-]+/
   DOMAINPAT = /#{DOMAINLABEL}(\.#{DOMAINLABEL})*/
 
-  MaintainedBranches = %w[trunk 2.4 2.3 2.2 2.1]
+  MaintainedBranches = %w[trunk 2.4 2.3 2.2]
 
   module_function
 
@@ -182,6 +182,7 @@ def (ChkBuild::Ruby::CompleteOptions).call(target_opts)
     :make_options => {},
     :force_gperf => false,
     :use_rubyspec => false,
+    :use_rubyspec_in_tree => false,
     :inplace_build => true,
     :validate_dependencies => false,
     :do_test => true,
@@ -198,6 +199,11 @@ def (ChkBuild::Ruby::CompleteOptions).call(target_opts)
 
   if /ruby_1_9_1/ =~ ruby_branch && opts[:use_rubyspec]
     opts[:use_rubyspec] = false
+  end
+
+  if /trunk/ =~ ruby_branch && opts[:use_rubyspec]
+    opts[:use_rubyspec] = false
+    opts[:use_rubyspec_in_tree] = true
   end
 
   if ruby_branch == 'branches/mvm' &&
@@ -281,6 +287,7 @@ def (ChkBuild::Ruby).build_proc(b)
   autoconf_command = bopts[:autoconf_command]
   make_options = Util.opts2hashparam(bopts, :make_options)
   use_rubyspec = bopts[:use_rubyspec]
+  use_rubyspec_in_tree = bopts[:use_rubyspec_in_tree]
   force_gperf = bopts[:force_gperf]
   inplace_build = bopts[:inplace_build]
   parallel = bopts[:parallel]
@@ -309,7 +316,8 @@ def (ChkBuild::Ruby).build_proc(b)
 
   Dir.chdir(checkout_dir)
   b.svn("http://svn.ruby-lang.org/repos/ruby", ruby_branch, 'ruby')
-  svn_info_section = b.logfile.get_section('svn/ruby')
+  b.svn_info('ruby', :section=>"svn-info/ruby")
+  svn_info_section = b.logfile.get_section('svn-info/ruby')
   ruby_svn_rev = svn_info_section[/Last Changed Rev: (\d+)/, 1].to_i
 
   Dir.chdir("ruby")
@@ -642,6 +650,14 @@ def (ChkBuild::Ruby).build_proc(b)
         }
       end
     end
+
+    if use_rubyspec_in_tree
+      b.mkcd("ruby")
+      b.catch_error {
+        FileUtils.rmtree "rubyspec_temp"
+        b.make("test-rubyspec", "MSPECOPT=-fm", make_options.merge(:section=>"rubyspec"))
+      }
+    end
   end
 
   Dir.chdir(ruby_build_dir)
@@ -664,11 +680,14 @@ ChkBuild.define_build_proc('ruby') {|b|
   ChkBuild::Ruby.build_proc(b)
 }
 
-ChkBuild.define_title_hook('ruby', %w[svn/ruby version.h verconf.h]) {|title, logs|
+ChkBuild.define_title_hook('ruby', %w[svn-info/ruby version.h verconf.h]) {|title, logs|
   log = logs.join('')
   lastrev = /^Last Changed Rev: (\d+)$/.match(log)
   version = /^#\s*define RUBY_VERSION "(\S+)"/.match(log)
   reldate = /^#\s*define RUBY_RELEASE_DATE "(\S+)"/.match(log)
+  relyear = /^#\s*define RUBY_RELEASE_YEAR (\d+)/.match(log)
+  relmonth = /^#\s*define RUBY_RELEASE_MONTH (\d+)/.match(log)
+  relday = /^#\s*define RUBY_RELEASE_DAY (\d+)/.match(log)
   patchlev = /^#\s*define RUBY_PATCHLEVEL (\S+)/.match(log)
   platform = /^#\s*define RUBY_PLATFORM "(\S+)"/.match(log)
   if lastrev
@@ -677,10 +696,15 @@ ChkBuild.define_title_hook('ruby', %w[svn/ruby version.h verconf.h]) {|title, lo
       str << "r#{lastrev[1]} "
     end
     str << 'ruby '
+    if reldate
+      reldate = reldate[1]
+    elsif relyear && relmonth && relday
+      reldate = "#{relyear[1]}-#{relmonth[1]}-#{relday[1]}"
+    end
     if version && reldate
       str << version[1]
       str << (patchlev[1] == '-1' ? 'dev' : "p#{patchlev[1]}") if patchlev
-      str << " (" << reldate[1] << ")"
+      str << " (" << reldate << ")"
       str << " [" << platform[1] << "]" if platform
       ss = title.suffixed_name.split(/-/)[1..-1].reject {|s|
         /\A(trunk|1\.8)\z/ =~ s ||
@@ -693,7 +717,7 @@ ChkBuild.define_title_hook('ruby', %w[svn/ruby version.h verconf.h]) {|title, lo
   end
 }
 
-ChkBuild.define_title_hook('ruby', 'svn/ruby') {|title, log|
+ChkBuild.define_title_hook('ruby', 'svn-info/ruby') {|title, log|
   lastrev = /^Last Changed Rev: (\d+)$/.match(log)
   if lastrev
     title.update_hidden_title(:ruby_rev, "r#{lastrev[1]}")
