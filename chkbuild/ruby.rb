@@ -106,7 +106,7 @@ End
   DOMAINLABEL = /[A-Za-z0-9-]+/
   DOMAINPAT = /#{DOMAINLABEL}(\.#{DOMAINLABEL})*/
 
-  MaintainedBranches = %w[trunk 2.4 2.3 2.2]
+  MaintainedBranches = %w[trunk 2.5 2.4 2.3 2.2]
 
   module_function
 
@@ -141,6 +141,7 @@ def (ChkBuild::Ruby::CompleteOptions).call(target_opts)
     when "mvm" then hs << { :ruby_branch => 'branches/mvm' }
     when "half-baked-1.9" then hs << { :ruby_branch => 'branches/half-baked-1.9' }
     when "matzruby" then hs << { :ruby_branch => 'branches/matzruby' }
+    when "2.5" then hs << { :ruby_branch => 'branches/ruby_2_5' }
     when "2.4" then hs << { :ruby_branch => 'branches/ruby_2_4' }
     when "2.3" then hs << { :ruby_branch => 'branches/ruby_2_3' }
     when "2.2" then hs << { :ruby_branch => 'branches/ruby_2_2' }
@@ -183,6 +184,7 @@ def (ChkBuild::Ruby::CompleteOptions).call(target_opts)
     :force_gperf => false,
     :use_rubyspec => false,
     :use_rubyspec_in_tree => false,
+    :use_bundler => false,
     :inplace_build => true,
     :validate_dependencies => false,
     :do_test => true,
@@ -204,6 +206,10 @@ def (ChkBuild::Ruby::CompleteOptions).call(target_opts)
   if /trunk/ =~ ruby_branch && opts[:use_rubyspec]
     opts[:use_rubyspec] = false
     opts[:use_rubyspec_in_tree] = true
+  end
+
+  if /trunk/ =~ ruby_branch && opts[:use_bundler]
+    opts[:use_bundler] = true
   end
 
   if ruby_branch == 'branches/mvm' &&
@@ -288,6 +294,7 @@ def (ChkBuild::Ruby).build_proc(b)
   make_options = Util.opts2hashparam(bopts, :make_options)
   use_rubyspec = bopts[:use_rubyspec]
   use_rubyspec_in_tree = bopts[:use_rubyspec_in_tree]
+  use_bundler = bopts[:use_bundler]
   force_gperf = bopts[:force_gperf]
   inplace_build = bopts[:inplace_build]
   parallel = bopts[:parallel]
@@ -656,6 +663,12 @@ def (ChkBuild::Ruby).build_proc(b)
       b.catch_error {
         FileUtils.rmtree "rubyspec_temp"
         b.make("yes-test-rubyspec", "MSPECOPT=-Vfs", make_options.merge(:section=>"rubyspec"))
+      }
+    end
+
+    if use_bundler
+      b.catch_error {
+        b.make("yes-test-bundler", make_options.merge(:section => "test-bundler"))
       }
     end
   end
