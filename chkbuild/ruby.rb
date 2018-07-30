@@ -106,9 +106,26 @@ End
   DOMAINLABEL = /[A-Za-z0-9-]+/
   DOMAINPAT = /#{DOMAINLABEL}(\.#{DOMAINLABEL})*/
 
-  MaintainedBranches = %w[trunk 2.5 2.4 2.3 2.2]
+  OldestMaintainedRelease = "2.3"
 
   module_function
+
+  def ruby_branches
+    IO.popen("svn ls http://svn.ruby-lang.org/repos/ruby/branches") {|f|
+      f.readlines.map {|f| f.chomp("/\n") }
+    }
+  end
+
+  def maintained_release_branches(rbs=ruby_branches)
+    rbs.map {|b|
+      next if /\Aruby_(\d+)_(\d+)\z/ !~ b
+      major_minor = [$1.to_i, $2.to_i]
+      major_minor = nil if (major_minor <=> OldestMaintainedRelease.scan(/\d+/).map(&:to_i)) < 0
+      major_minor
+    }.compact.sort.reverse.map {|major, minor|
+      "#{major}.#{minor}"
+    }
+  end
 
   def def_target(*args)
     args << { :complete_options => CompleteOptions }
@@ -141,11 +158,8 @@ def (ChkBuild::Ruby::CompleteOptions).call(target_opts)
     when "mvm" then hs << { :ruby_branch => 'branches/mvm' }
     when "half-baked-1.9" then hs << { :ruby_branch => 'branches/half-baked-1.9' }
     when "matzruby" then hs << { :ruby_branch => 'branches/matzruby' }
-    when "2.5" then hs << { :ruby_branch => 'branches/ruby_2_5' }
-    when "2.4" then hs << { :ruby_branch => 'branches/ruby_2_4' }
-    when "2.3" then hs << { :ruby_branch => 'branches/ruby_2_3' }
-    when "2.2" then hs << { :ruby_branch => 'branches/ruby_2_2' }
-    when "2.1" then hs << { :ruby_branch => 'branches/ruby_2_1' }
+    when /\A([3-9]).([0-9]\d*)\z/ then hs << { :ruby_branch => "branches/ruby_#$1_#$2" }
+    when /\A2.([1-9]\d*)\z/ then hs << { :ruby_branch => "branches/ruby_2_#$1" }
     when "2.0.0" then hs << { :ruby_branch => 'branches/ruby_2_0_0' }
     when "1.9.3" then hs << { :ruby_branch => 'branches/ruby_1_9_3' }
     when "1.9.2" then hs << { :ruby_branch => 'branches/ruby_1_9_2' }
@@ -184,7 +198,7 @@ def (ChkBuild::Ruby::CompleteOptions).call(target_opts)
     :force_gperf => false,
     :use_rubyspec => false,
     :use_rubyspec_in_tree => false,
-    :use_bundler => false,
+    :use_bundled_gems => false,
     :inplace_build => true,
     :validate_dependencies => false,
     :do_test => true,
@@ -208,8 +222,8 @@ def (ChkBuild::Ruby::CompleteOptions).call(target_opts)
     opts[:use_rubyspec_in_tree] = true
   end
 
-  if /trunk/ =~ ruby_branch && opts[:use_bundler]
-    opts[:use_bundler] = true
+  if /trunk/ =~ ruby_branch && opts[:use_bundled_gems]
+    opts[:use_bundled_gems] = true
   end
 
   if ruby_branch == 'branches/mvm' &&
@@ -294,7 +308,7 @@ def (ChkBuild::Ruby).build_proc(b)
   make_options = Util.opts2hashparam(bopts, :make_options)
   use_rubyspec = bopts[:use_rubyspec]
   use_rubyspec_in_tree = bopts[:use_rubyspec_in_tree]
-  use_bundler = bopts[:use_bundler]
+  use_bundled_gems = bopts[:use_bundled_gems]
   force_gperf = bopts[:force_gperf]
   inplace_build = bopts[:inplace_build]
   parallel = bopts[:parallel]
@@ -666,9 +680,9 @@ def (ChkBuild::Ruby).build_proc(b)
       }
     end
 
-    if use_bundler
+    if use_bundled_gems
       b.catch_error {
-        b.make("yes-test-bundler", make_options.merge(:section => "test-bundler"))
+        b.make("yes-test-bundled-gems", make_options.merge(:section => "test-bundled-gems"))
       }
     end
   end

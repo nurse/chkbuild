@@ -58,10 +58,7 @@ ChkBuild.s3_upload_target
 arg = [].push(
   [
     { :suffix_? => 'trunk', :output_interval_timeout => '10min' },
-    { :suffix_? => '2.5', :output_interval_timeout => '15min' },
-    { :suffix_? => '2.4', :output_interval_timeout => '15min' },
-    { :suffix_? => '2.3', :output_interval_timeout => '15min' },
-    { :suffix_? => '2.2', :output_interval_timeout => '15min' },
+    *ChkBuild::Ruby.maintained_release_branches
   ],
 
 #   [ # :abi_check needs --enable-shared
