@@ -603,10 +603,6 @@ def (ChkBuild::Ruby).build_proc(b)
     if File.file? "#{srcdir}/KNOWNBUGS.rb"
       b.catch_error { b.make("test-knownbug", "OPTS=-v -q", make_options) }
     end
-    test_all_option = ''
-    if ChkBuild.nickname == 'unstable10x'
-      test_all_option = '-n"/#(?!test_qsort1)/" '
-    end
     hide_skip_option = ''
     if ruby_version.since(1,9,3)
       hide_skip_option = '--hide-skip '
@@ -615,7 +611,7 @@ def (ChkBuild::Ruby).build_proc(b)
       parallel_option = ''
       parallel_option = "j#{parallel}" if parallel
 
-      b.make("test-all", "TESTS=#{test_all_option}#{hide_skip_option}-v#{parallel_option}", "RUBYOPT=-w", make_options.merge(:section=>"test-all"))
+      b.make("test-all", "TESTS=#{hide_skip_option}-v#{parallel_option}", "RUBYOPT=-w", make_options.merge(:section=>"test-all"))
     }
     b.catch_error {
       if /^\d+ tests, \d+ assertions, (\d+) failures, (\d+) errors/ !~ b.logfile.get_section('test-all')
@@ -630,7 +626,7 @@ def (ChkBuild::Ruby).build_proc(b)
               else
                 testpath = t # "TESTS=-v test/foo" doesn't work on Ruby 1.8
               end
-              b.make("test-all", "TESTS=#{test_all_option}#{hide_skip_option}-v #{testpath}", "RUBYOPT=-w", make_options.merge(:section=>"test/#{t}"))
+              b.make("test-all", "TESTS=#{hide_skip_option}-v #{testpath}", "RUBYOPT=-w", make_options.merge(:section=>"test/#{t}"))
             }
           end
         }
