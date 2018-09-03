@@ -57,7 +57,7 @@ require 'chkbuild'
 ChkBuild.s3_upload_target
 arg = [].push(
   [
-    { :suffix_? => 'trunk', :output_interval_timeout => '10min' },
+    { :suffix_? => 'trunk', :output_interval_timeout => '20min' },
     *ChkBuild::Ruby.maintained_release_branches
   ],
 
