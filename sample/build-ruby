@@ -123,6 +123,11 @@ when 'scw-9d6766', 'tk2-243-31075', 'armv8b'
   arg[0].slice!(1,9)
 end
 
+case ChkBuild.nickname
+when 'unstable10s', 'scw-9d6766'
+  h[:timeout] = '3h'
+end
+
 autoconf_command = '/home/naruse/local/autoconf/bin/autoconf'
 h[:autoconf_command] = autoconf_command if File.exist?(autoconf_command)
 h[:configure_args] = ["--with-baseruby=#{RbConfig.ruby}"]
