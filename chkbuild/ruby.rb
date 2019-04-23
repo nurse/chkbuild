@@ -106,13 +106,13 @@ End
   DOMAINLABEL = /[A-Za-z0-9-]+/
   DOMAINPAT = /#{DOMAINLABEL}(\.#{DOMAINLABEL})*/
 
-  OldestMaintainedRelease = "2.3"
+  OldestMaintainedRelease = "2.4"
 
   module_function
 
   def ruby_branches
-    IO.popen("svn ls http://svn.ruby-lang.org/repos/ruby/branches") {|f|
-      f.readlines.map {|f| f.chomp("/\n") }
+    IO.popen("git ls-remote https://github.com/ruby/ruby") {|f|
+      f.readlines.map {|f| f.chomp("/\n") }.map{|l| l.match(/[a-z0-9]+\trefs\/heads\/(.*)/)}.compact.map{|m| m[1]}
     }
   end
 
@@ -193,6 +193,7 @@ def (ChkBuild::Ruby::CompleteOptions).call(target_opts)
     :dldflags => %w[],
     :make_options => {},
     :force_gperf => false,
+    :coverage_measurement => false,
     :use_rubyspec => false,
     :use_rubyspec_in_tree => false,
     :use_bundled_gems => false,
@@ -301,6 +302,7 @@ def (ChkBuild::Ruby).build_proc(b)
   use_rubyspec_in_tree = bopts[:use_rubyspec_in_tree]
   use_bundled_gems = bopts[:use_bundled_gems]
   force_gperf = bopts[:force_gperf]
+  coverage_measurement = bopts[:coverage_measurement]
   inplace_build = bopts[:inplace_build]
   parallel = bopts[:parallel]
   validate_dependencies = bopts[:validate_dependencies]
@@ -327,10 +329,8 @@ def (ChkBuild::Ruby).build_proc(b)
   srcdir = (checkout_dir+'ruby').relative_path_from(objdir)
 
   Dir.chdir(checkout_dir)
-  b.svn("http://svn.ruby-lang.org/repos/ruby", ruby_branch, 'ruby')
-  b.svn_info('ruby', :section=>"svn-info/ruby")
-  svn_info_section = b.logfile.get_section('svn-info/ruby')
-  ruby_svn_rev = svn_info_section[/Last Changed Rev: (\d+)/, 1].to_i
+  b.git("https://github.com/ruby/ruby", 'ruby', bopts)
+  ruby_git_rev = b.git_head_commit[0..10]
 
   Dir.chdir("ruby")
 
@@ -420,6 +420,10 @@ def (ChkBuild::Ruby).build_proc(b)
   args << "debugflags=#{debugflags.join(' ')}" if debugflags
   args << "warnflags=#{warnflags.join(' ')}" if warnflags
   args << "DLDFLAGS=#{dldflags.join(' ')}" unless dldflags.empty?
+  if coverage_measurement
+    args << "--enable-gcov"
+    configure_args = configure_args.reject {|s| s == "--with-valgrind" }
+  end
   args.concat configure_args
   b.run("#{srcdir}/configure", *args)
 
@@ -466,6 +470,11 @@ def (ChkBuild::Ruby).build_proc(b)
   if /^CC[ \t]*=[ \t](\S*)/ =~ File.read('Makefile')
     cc = $1
     b.cc_version(cc)
+  end
+
+  if coverage_measurement
+    b.make("update-coverage")
+    make_options["ENV:COVERAGE"] = "true"
   end
 
   make_args = ["miniruby", make_options]
@@ -544,6 +553,12 @@ def (ChkBuild::Ruby).build_proc(b)
   end
 
   b.make("install-nodoc", make_options)
+
+  if coverage_measurement
+    Dir.glob(ruby_build_dir + "**/*.gcda").each {|f|
+      File.chmod(0644, f)
+    }
+  end
 
   if Util.search_command('file')
     b.catch_error {
@@ -676,13 +691,15 @@ def (ChkBuild::Ruby).build_proc(b)
 
   Dir.chdir(ruby_build_dir)
   Dir.chdir('ruby') {
+    b.make("lcov") if coverage_measurement
+
     relname = nil
     if ruby_version.before(1,9,3)
       # "make dist" doesn't support BRANCH@rev.
       relname = nil
     else
       # "make dist" support BRANCH@rev since Ruby 1.9.3.
-      relname = "#{ruby_branch}@#{ruby_svn_rev}"
+      relname = "#{ruby_branch}@#{ruby_git_rev}"
     end
     if relname
       b.make("dist", "RELNAME=#{relname}", "AUTOCONF=#{autoconf_command}")
@@ -694,9 +711,9 @@ ChkBuild.define_build_proc('ruby') {|b|
   ChkBuild::Ruby.build_proc(b)
 }
 
-ChkBuild.define_title_hook('ruby', %w[svn-info/ruby version.h verconf.h]) {|title, logs|
+ChkBuild.define_title_hook('ruby', %w[git/ruby version.h verconf.h]) {|title, logs|
   log = logs.join('')
-  lastrev = /^Last Changed Rev: (\d+)$/.match(log)
+  lastrev = /^LASTCOMMIT (\S+)$/.match(log)
   version = /^#\s*define RUBY_VERSION "(\S+)"/.match(log)
   reldate = /^#\s*define RUBY_RELEASE_DATE "(\S+)"/.match(log)
   relyear = /^#\s*define RUBY_RELEASE_YEAR (\d+)/.match(log)
@@ -707,7 +724,7 @@ ChkBuild.define_title_hook('ruby', %w[svn-info/ruby version.h verconf.h]) {|titl
   if lastrev
     str = ''
     if lastrev
-      str << "r#{lastrev[1]} "
+      str << lastrev[1][0..10]
     end
     str << 'ruby '
     if reldate
@@ -731,10 +748,10 @@ ChkBuild.define_title_hook('ruby', %w[svn-info/ruby version.h verconf.h]) {|titl
   end
 }
 
-ChkBuild.define_title_hook('ruby', 'svn-info/ruby') {|title, log|
-  lastrev = /^Last Changed Rev: (\d+)$/.match(log)
-  if lastrev
-    title.update_hidden_title(:ruby_rev, "r#{lastrev[1]}")
+ChkBuild.define_title_hook('ruby', 'git/ruby') {|title, log|
+lastrev = /^LASTCOMMIT (\S+)$/.match(log)
+if lastrev
+    title.update_hidden_title(:ruby_rev, lastrev[1][0..10])
   end
 }
 
