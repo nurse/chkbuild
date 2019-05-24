@@ -124,7 +124,9 @@ when 'scw-9d6766', 'tk2-243-31075', 'armv8b'
 end
 
 case ChkBuild.nickname
-when 'unstable10s', 'scw-9d6766'
+when 'unstable10s'
+  h[:timeout] = '10h'
+when 'scw-9d6766'
   h[:timeout] = '3h'
 end
 
