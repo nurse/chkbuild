@@ -126,6 +126,7 @@ end
 case ChkBuild.nickname
 when 'unstable10s'
   h[:timeout] = '10h'
+  arg[0][0][:output_interval_timeout] = '60min'
 when 'scw-9d6766'
   h[:timeout] = '3h'
 end
