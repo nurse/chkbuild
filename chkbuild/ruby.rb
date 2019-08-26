@@ -70,7 +70,7 @@ End
     ary << ["libc", lambda { Etc.confstr(Etc::CS_GNU_LIBC_VERSION) }]
   end
   ary.concat [
-    ["gmp", lambda { Bignum::GMP_VERSION }],
+    ["gmp", lambda { (1 << 1000).class::GMP_VERSION }],
     ["dbm", lambda { require "dbm"; DBM::VERSION }],
     ["gdbm", lambda { require "gdbm"; GDBM::VERSION }],
     ["readline", lambda { require "readline"; Readline::VERSION }],
@@ -340,8 +340,8 @@ def (ChkBuild::Ruby).build_proc(b)
     svn_info_section = b.logfile.get_section('svn-info/ruby')
     ruby_rev = svn_info_section[/Last Changed Rev: (\d+)/, 1].to_i
   else
-    b.git("https://github.com/ruby/ruby", 'ruby', bopts)
-    ruby_rev = b.git_head_commit[0..10]
+    b.git("https://github.com/ruby/ruby", 'ruby', {:git_fetch_refspec => "refs/notes/commits:refs/notes/commits"}.update(bopts))
+    ruby_rev = Dir.chdir('ruby') {b.git_head_commit[0..10]}
   end
 
   Dir.chdir("ruby")
@@ -360,6 +360,10 @@ def (ChkBuild::Ruby).build_proc(b)
       RUBY_VERSION_MAJOR
       RUBY_VERSION_MINOR
       RUBY_VERSION_TEENY
+    ],
+    'include/ruby/version.h' => %w[
+      RUBY_API_VERSION_MAJOR
+      RUBY_API_VERSION_MINOR
     ],
   }
   version_info = {}
@@ -382,6 +386,19 @@ def (ChkBuild::Ruby).build_proc(b)
       *%w[YEAR MONTH DAY].map{|s|"RUBY_RELEASE_#{s}"}
     ).map(&:to_i)
     puts %<#define RUBY_RELEASE_DATE "#{version_info['RUBY_RELEASE_DATE']}">
+  end
+  unless version_info['RUBY_VERSION']
+    while version_info['RUBY_VERSION_MAJOR'] && version_info['RUBY_VERSION_MAJOR'] !~ /\A\d+\z/
+      version_info['RUBY_VERSION_MAJOR'] = version_info[version_info['RUBY_VERSION_MAJOR']]
+    end
+    while version_info['RUBY_VERSION_MINOR'] && version_info['RUBY_VERSION_MINOR'] !~ /\A\d+\z/
+      version_info['RUBY_VERSION_MINOR'] = version_info[version_info['RUBY_VERSION_MINOR']]
+    end
+    version_info['RUBY_VERSION'] = '%d.%d.%d' % [
+      version_info['RUBY_VERSION_MAJOR'],
+      version_info['RUBY_VERSION_MINOR'],
+      version_info['RUBY_VERSION_TEENY'],
+    ]
   end
   ruby_version = ChkBuild::Ruby::RubyVersion.new(version_info)
 
@@ -1297,11 +1314,11 @@ ChkBuild.define_diff_preprocess_sort('ruby', /\A- returns self as a symbol liter
 # Exporting trunk@48875
 # Exported revision 48875.
 #
-ChkBuild.define_diff_preprocess_gsub('ruby', %r{(RELNAME=[0-9A-Za-z/_.-]+@)\d+}) {|match| "#{match[1]}<rev>" }
-ChkBuild.define_diff_preprocess_gsub('ruby', %r{(make-snapshot tmp [0-9A-Za-z/_.-]+@)\d+}) {|match| "#{match[1]}<rev>" }
-ChkBuild.define_diff_preprocess_gsub('ruby', %r{(Exporting [0-9A-Za-z/_.-]+@)\d+}) {|match| "#{match[1]}<rev>" }
-ChkBuild.define_diff_preprocess_gsub('ruby', %r{(Exported revision )\d+}) {|match| "#{match[1]}<rev>" }
-ChkBuild.define_diff_preprocess_gsub('ruby', %r{(make-snapshot .* [0-9A-Za-z/_.-]+@)\d+}) {|match| "#{match[1]}<rev>" }
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{(RELNAME=[0-9A-Za-z/_.-]+@)\h+}) {|match| "#{match[1]}<rev>" }
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{(make-snapshot tmp [0-9A-Za-z/_.-]+@)\h+}) {|match| "#{match[1]}<rev>" }
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{(Exporting [0-9A-Za-z/_.-]+@)\h+}) {|match| "#{match[1]}<rev>" }
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{(Exported revision )\h+}) {|match| "#{match[1]}<rev>" }
+ChkBuild.define_diff_preprocess_gsub('ruby', %r{(make-snapshot .* [0-9A-Za-z/_.-]+@)\h+}) {|match| "#{match[1]}<rev>" }
 
 # make dist
 # make[1]: Entering directory `/home/akr/chkbuild/tmp/build/ruby-trunk/<buildtime>/tmp/ruby-snapshot20100821-16136-p60p7s/ruby-1.9.3-r29063'

@@ -75,17 +75,26 @@ class ChkBuild::IBuild
     FileUtils.mkdir_p(GIT_SHARED_DIR)
     opts_shared = opts.dup
     opts_shared[:section] += "(shared)"
-    branch = opts[:branch] || git_default_branch(cloneurl)
+    branch = opts[:branch] #|| git_default_branch(cloneurl)
     FileUtils.rm_rf(working_dir) if File.exist?(working_dir)
     pdir = File.dirname(working_dir)
     FileUtils.mkdir_p(pdir) if !File.directory?(pdir)
     git_logfile(opts) {|opts2|
-      command = ["git", "clone", "--depth", "1", "-q"]
+      command = ["git", "clone", "-q"]
       command << '--branch' << branch if branch
       command << cloneurl
       command << working_dir
       command << opts2
       self.run(*command)
+      if opts[:git_fetch_refspec]
+        Dir.chdir(working_dir) {
+          opts2[:section] = nil
+          command = ["git", "fetch", "-q", "origin"]
+          command << opts[:git_fetch_refspec]
+          command << opts2
+          self.run(*command)
+        }
+      end
     }
     Dir.chdir(working_dir) {
       new_head = git_head_commit
