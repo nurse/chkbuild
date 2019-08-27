@@ -117,6 +117,7 @@ when /\ASunOS/
 #  h[:configure_args_cc] = %w[CC=/opt/solarisstudio12.4/bin/cc]
   arg[0].slice!(1,9)
   h[:optflags] = '-O3 -mfpmath=sse -msse2' if /i86/ =~ uname
+  h[:git_shallow_clone] = true
 end
 
 case ChkBuild.nickname
